@@ -5,14 +5,10 @@
     "module": "ESNext",
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "noEmit": true,
-    "composite": false,
-    "incremental": false,
     "isolatedModules": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "./dist",
     "removeComments": false,
     "importHelpers": true,
     "downlevelIteration": true,
@@ -41,13 +37,14 @@
       "@ryancavanaugh/ai": ["packages/ai/src/index.ts"]
     }
   },
-  "include": [
-    "packages/*/src/**/*",
-    "*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.test.ts"
+  "files": [],
+  "references": [
+    { "path": "packages/utils" },
+    { "path": "packages/kvcache" },
+    { "path": "packages/issue-fetcher" },
+    { "path": "packages/twoslash" },
+    { "path": "packages/lsp-harness" },
+    { "path": "packages/ai" },
+    { "path": "packages/cli" }
   ]
 }

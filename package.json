@@ -8,9 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "tsc -b",
     "test": "jest",
-    "clean": "npm run clean --workspaces && rm -rf dist",
+    "clean": "tsc -b --clean && npm run clean --workspaces && rm -rf dist",
     "dev": "npm run dev --workspaces"
   },
   "keywords": [
