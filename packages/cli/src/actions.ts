@@ -58,4 +58,3 @@ export const actionFileSchema = z.object({
 
 export type Action = z.infer<typeof actionSchema>;
 export type ActionFile = z.infer<typeof actionFileSchema>;
-export type IssueRef = z.infer<typeof issueRefSchema>;

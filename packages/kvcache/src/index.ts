@@ -1,6 +1,26 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { formatCacheKey } from '@ryancavanaugh/utils';
+
+// Hash function for cache keys
+function hashString(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0');
+}
+
+// Format cache key for file storage
+function formatCacheKey(key: string): { dir: string; subdir: string; filename: string } {
+  const hash = hashString(key).substring(0, 16);
+  return {
+    dir: hash.substring(0, 2),
+    subdir: hash.substring(2, 4),
+    filename: hash.substring(4) + '.json'
+  };
+}
 
 export interface CacheOptions {
   cacheDir: string;

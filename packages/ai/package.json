@@ -1,0 +1,23 @@
+{
+  "name": "@ryancavanaugh/ai",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AI integration utilities for TypeScript auto-triage",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.0.1",
+    "@azure/openai": "^1.0.0-beta.12",
+    "openai": "^4.28.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

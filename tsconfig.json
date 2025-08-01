@@ -29,7 +29,17 @@
     "allowUnusedLabels": false,
     "allowUnreachableCode": false,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@ryancavanaugh/utils": ["packages/utils/src/index.ts"],
+      "@ryancavanaugh/kvcache": ["packages/kvcache/src/index.ts"],
+      "@ryancavanaugh/issue-fetcher": ["packages/issue-fetcher/src/index.ts"],
+      "@ryancavanaugh/twoslash": ["packages/twoslash/src/index.ts"],
+      "@ryancavanaugh/lsp-harness": ["packages/lsp-harness/src/index.ts"],
+      "@ryancavanaugh/ai": ["packages/ai/src/index.ts"]
+    }
   },
   "include": [
     "packages/*/src/**/*",
