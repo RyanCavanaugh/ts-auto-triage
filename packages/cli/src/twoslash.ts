@@ -148,14 +148,12 @@ async function processCodeBlock(
       const tsconfigContent = parser.generateTsconfig(document);
       await writeFile(join(tempDir, 'tsconfig.json'), tsconfigContent);
 
-      // Find TypeScript server path
-      const tsServerPath = await findTypeScriptServer();
-      
-      // Create LSP harness
+      // Create LSP harness with native preview
       const lsp = createLSPHarness({
         logger,
-        tsServerPath,
-        workspaceRoot: tempDir
+        tsServerPath: '', // Not used when useNativePreview is true
+        workspaceRoot: tempDir,
+        useNativePreview: true
       });
 
       await lsp.start();
@@ -218,24 +216,6 @@ function offsetToPosition(content: string, offset: number): { line: number; char
     line: lines.length - 1,
     character: lines[lines.length - 1]?.length || 0
   };
-}
-
-async function findTypeScriptServer(): Promise<string> {
-  // Try common locations for TypeScript server
-  const commonPaths = [
-    'node_modules/typescript/lib/tsserver.js',
-    '../../../node_modules/typescript/lib/tsserver.js',
-    '/usr/local/lib/node_modules/typescript/lib/tsserver.js'
-  ];
-
-  for (const path of commonPaths) {
-    if (existsSync(path)) {
-      return resolve(path);
-    }
-  }
-
-  // Fallback: assume typescript is in PATH
-  return 'tsserver';
 }
 
 main();
