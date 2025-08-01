@@ -12,7 +12,15 @@
     "clean": "tsc --build --clean",
     "test": "jest",
     "lint": "eslint src --ext .ts",
-    "dev": "tsc --build --watch"
+    "dev": "tsc --build --watch",
+    "fetch-issues": "node src/cli/fetch-issues.js",
+    "fetch-issue": "node src/cli/fetch-issue.js",
+    "summarize-issues": "node src/cli/summarize-issues.js",
+    "first-response": "node src/cli/first-response.js",
+    "curate-issue": "node src/cli/curate-issue.js",
+    "exec-action": "node src/cli/exec-action.js",
+    "repro-issue": "node src/cli/repro-issue.js",
+    "twoslash": "node src/cli/twoslash.js"
   },
   "devDependencies": {
     "@types/jest": "^29.0.0",
