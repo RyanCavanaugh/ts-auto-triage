@@ -1,0 +1,42 @@
+// Configuration for the TypeScript auto-triage tool
+{
+  // Azure OpenAI endpoints
+  "azure": {
+    "endpoints": {
+      "gpt4": "https://your-resource.openai.azure.com/",
+      "gpt35": "https://your-resource.openai.azure.com/",
+      "embeddings": "https://your-resource.openai.azure.com/"
+    },
+    "deployments": {
+      "gpt4": "gpt-4",
+      "gpt35": "gpt-35-turbo",
+      "embeddings": "text-embedding-ada-002"
+    }
+  },
+  
+  // TypeScript compiler paths
+  "typescript": {
+    "tscPath": "tsc",
+    "lspPath": "typescript-language-server"
+  },
+  
+  // GitHub configuration
+  "github": {
+    "defaultRepo": "Microsoft/TypeScript"
+  },
+  
+  // AI model preferences
+  "ai": {
+    "primaryModel": "gpt4",
+    "fallbackModel": "gpt35",
+    "embeddingsModel": "embeddings",
+    "maxTokens": 4096,
+    "temperature": 0.1
+  },
+  
+  // Caching configuration
+  "cache": {
+    "ttlHours": 24,
+    "maxCacheSize": "1GB"
+  }
+}
