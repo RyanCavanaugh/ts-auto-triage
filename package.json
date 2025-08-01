@@ -34,6 +34,7 @@
     "@azure/openai": "^1.0.0-beta.12",
     "@octokit/rest": "^20.0.2",
     "@octokit/graphql": "^7.0.2",
+    "openai": "^4.28.0",
     "zod": "^3.22.4"
   },
   "engines": {

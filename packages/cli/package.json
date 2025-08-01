@@ -1,0 +1,36 @@
+{
+  "name": "@ryancavanaugh/cli",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "CLI entry points for ts-auto-triage",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "repro-issue": "dist/repro-issue.js",
+    "fetch-issues": "dist/fetch-issues.js",
+    "fetch-issue": "dist/fetch-issue.js",
+    "summarize-issues": "dist/summarize-issues.js",
+    "curate-issue": "dist/curate-issue.js",
+    "exec-action": "dist/exec-action.js",
+    "first-response": "dist/first-response.js",
+    "twoslash": "dist/twoslash.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@ryancavanaugh/utils": "^1.0.0",
+    "@ryancavanaugh/kvcache": "^1.0.0",
+    "@ryancavanaugh/issue-fetcher": "^1.0.0",
+    "@ryancavanaugh/twoslash": "^1.0.0",
+    "@ryancavanaugh/lsp-harness": "^1.0.0",
+    "openai": "^4.28.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "typescript": "^5.9.0"
+  }
+}
