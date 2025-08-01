@@ -134,7 +134,11 @@ export function createLSPHarness(options: LSPHarnessOptions) {
       return [];
     }
 
-    const entries = (response as any).entries || [];
+    const entries = (response as any).entries;
+    if (!Array.isArray(entries)) {
+      return [];
+    }
+    
     return entries.map((entry: any) => {
       try {
         return completionItemSchema.parse({
