@@ -1,0 +1,19 @@
+{
+  "name": "@ryancavanaugh/utils",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Utility functions for ts-auto-triage",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

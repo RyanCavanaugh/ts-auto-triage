@@ -1,0 +1,30 @@
+{
+  // Configuration for the TypeScript auto-triage tool
+  "typescript": {
+    "tscPath": "tsc",
+    "lspEntryPoint": "typescript/lib/tsserver.js"
+  },
+  "ai": {
+    "deployments": {
+      "azure": {
+        "endpoint": "https://your-resource.openai.azure.com/",
+        "deploymentName": "gpt-4",
+        "apiVersion": "2024-02-15-preview"
+      }
+    },
+    "embeddings": {
+      "endpoint": "https://your-resource.openai.azure.com/",
+      "deploymentName": "text-embedding-ada-002",
+      "apiVersion": "2024-02-15-preview"
+    }
+  },
+  "github": {
+    "rateLimitDelay": 1000,
+    "maxRetries": 3,
+    "backoffMultiplier": 2
+  },
+  "cache": {
+    "keyLength": 16,
+    "maxAge": 86400000
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@ryancavanaugh/kvcache",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Key-value cache with disk persistence for ts-auto-triage",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@ryancavanaugh/utils": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "typescript": "^5.9.0"
+  }
+}
