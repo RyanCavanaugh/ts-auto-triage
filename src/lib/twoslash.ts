@@ -43,7 +43,7 @@ export function createTwoslashParser(logger: Logger): TwoslashParser {
           if (!config.compilerOptions) {
             config.compilerOptions = {};
           }
-          const option = line.slice(3).trim();
+          const option = line.slice(4).trim(); // Skip '// @'
           const [key, value] = option.split(':').map(s => s.trim());
           if (key && value) {
             config.compilerOptions[key] = parseCompilerOptionValue(value);
@@ -53,6 +53,11 @@ export function createTwoslashParser(logger: Logger): TwoslashParser {
         
         // Check for file declarations
         if (line.startsWith('// ') && line.includes('.ts')) {
+          // Finish previous file if it exists
+          if (currentFile && currentFile.content) {
+            config.files.push(currentFile);
+          }
+          
           const filename = line.slice(3).trim();
           currentFile = { filename, content: '' };
           continue;

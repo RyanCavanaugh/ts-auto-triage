@@ -1,5 +1,5 @@
-import { createKVCache } from '../src/lib/kvcache.js';
-import { createMockLogger } from '../src/lib/utils.js';
+import { createKVCache } from './kvcache.js';
+import { createMockLogger } from './utils.js';
 
 describe('KVCache', () => {
   const logger = createMockLogger();

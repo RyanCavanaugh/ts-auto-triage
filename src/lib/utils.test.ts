@@ -1,4 +1,4 @@
-import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath } from '../src/lib/utils.js';
+import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath } from './utils.js';
 
 describe('Utils', () => {
   describe('parseIssueRef', () => {

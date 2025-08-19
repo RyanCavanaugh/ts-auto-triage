@@ -63,7 +63,9 @@ function createSimpleHash(input: string): string {
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
-  return Math.abs(hash).toString(16);
+  // Ensure we always get a 16-character hex string
+  const hexHash = Math.abs(hash).toString(16);
+  return hexHash.padStart(16, '0');
 }
 
 export function ensureDirectoryExists(filePath: string): void {

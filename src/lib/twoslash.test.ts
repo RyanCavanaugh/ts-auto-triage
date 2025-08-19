@@ -1,5 +1,5 @@
-import { createTwoslashParser } from '../src/lib/twoslash.js';
-import { createMockLogger } from '../src/lib/utils.js';
+import { createTwoslashParser } from './twoslash.js';
+import { createMockLogger } from './utils.js';
 
 describe('Twoslash Parser', () => {
   const logger = createMockLogger();
