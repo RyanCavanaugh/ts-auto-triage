@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type { IssueRef } from './schemas.js';
 
 export function parseIssueRef(input: string): IssueRef {
@@ -69,8 +71,6 @@ function createSimpleHash(input: string): string {
 }
 
 export function ensureDirectoryExists(filePath: string): void {
-  const path = require('path');
-  const fs = require('fs');
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
