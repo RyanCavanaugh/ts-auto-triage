@@ -1,0 +1,132 @@
+import { z } from 'zod';
+
+export const IssueRefSchema = z.object({
+  owner: z.string(),
+  repo: z.string(),
+  number: z.number(),
+});
+
+export type IssueRef = z.infer<typeof IssueRefSchema>;
+
+export const GitHubUserSchema = z.object({
+  login: z.string(),
+  id: z.number(),
+  type: z.enum(['User', 'Bot', 'Organization']),
+});
+
+export const GitHubLabelSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  color: z.string(),
+  description: z.string().nullable(),
+});
+
+export const GitHubMilestoneSchema = z.object({
+  id: z.number(),
+  number: z.number(),
+  title: z.string(),
+  description: z.string().nullable(),
+  state: z.enum(['open', 'closed']),
+});
+
+export const GitHubCommentSchema = z.object({
+  id: z.number(),
+  body: z.string(),
+  user: GitHubUserSchema,
+  created_at: z.string(),
+  updated_at: z.string(),
+  author_association: z.string(),
+  reactions: z.record(z.number()),
+});
+
+export const GitHubIssueSchema = z.object({
+  id: z.number(),
+  number: z.number(),
+  title: z.string(),
+  body: z.string().nullable(),
+  user: GitHubUserSchema,
+  state: z.enum(['open', 'closed']),
+  state_reason: z.string().nullable(),
+  labels: z.array(GitHubLabelSchema),
+  milestone: GitHubMilestoneSchema.nullable(),
+  assignees: z.array(GitHubUserSchema),
+  created_at: z.string(),
+  updated_at: z.string(),
+  closed_at: z.string().nullable(),
+  author_association: z.string(),
+  reactions: z.record(z.number()),
+  comments: z.array(GitHubCommentSchema),
+  is_pull_request: z.boolean(),
+});
+
+export type GitHubIssue = z.infer<typeof GitHubIssueSchema>;
+
+export const IssueActionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('add_label'),
+    label: z.string(),
+  }),
+  z.object({
+    kind: z.literal('remove_label'),
+    label: z.string(),
+  }),
+  z.object({
+    kind: z.literal('close_issue'),
+    reason: z.enum(['completed', 'not_planned']),
+  }),
+  z.object({
+    kind: z.literal('add_comment'),
+    body: z.string(),
+  }),
+  z.object({
+    kind: z.literal('set_milestone'),
+    milestone: z.string(),
+  }),
+  z.object({
+    kind: z.literal('assign_user'),
+    user: z.string(),
+  }),
+]);
+
+export type IssueAction = z.infer<typeof IssueActionSchema>;
+
+export const ActionFileSchema = z.object({
+  issue_ref: IssueRefSchema,
+  actions: z.array(IssueActionSchema),
+});
+
+export type ActionFile = z.infer<typeof ActionFileSchema>;
+
+export const ConfigSchema = z.object({
+  typescript: z.object({
+    tscPath: z.string(),
+    lspEntryPoint: z.string(),
+  }),
+  azure: z.object({
+    openai: z.object({
+      endpoint: z.string(),
+      deployments: z.object({
+        chat: z.string(),
+        embeddings: z.string(),
+      }),
+    }),
+  }),
+  github: z.object({
+    maxIssueBodyLength: z.number(),
+    maxCommentLength: z.number(),
+    rateLimitRetryDelay: z.number(),
+    maxRetries: z.number(),
+  }),
+  ai: z.object({
+    maxReproAttempts: z.number(),
+    cacheEnabled: z.boolean(),
+  }),
+});
+
+export type Config = z.infer<typeof ConfigSchema>;
+
+export const EmbeddingsDataSchema = z.record(z.string()); // base64 encoded embeddings
+export const SummariesDataSchema = z.record(z.string()); // issue summaries
+
+export type EmbeddingsData = z.infer<typeof EmbeddingsDataSchema>;
+export type SummariesData = z.infer<typeof SummariesDataSchema>;
