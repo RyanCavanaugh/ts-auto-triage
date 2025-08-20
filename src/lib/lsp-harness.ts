@@ -200,9 +200,9 @@ export function createLSPHarness(
       const response = await sendRequest('textDocument/signatureHelp', {
         textDocument: { uri },
         position,
-      });
+      }) as LSPSignatureHelp | null;
       
-      return response || null;
+      return response;
     },
 
     async getHover(filePath: string, position: Position): Promise<LSPHover | null> {
@@ -211,15 +211,20 @@ export function createLSPHarness(
       const response = await sendRequest('textDocument/hover', {
         textDocument: { uri },
         position,
-      });
+      }) as { contents?: string | { value: string } | unknown; range?: Range } | null;
       
       if (response?.contents) {
-        return {
+        const result: LSPHover = {
           contents: typeof response.contents === 'string' 
             ? response.contents 
-            : response.contents.value || JSON.stringify(response.contents),
-          range: response.range,
+            : (response.contents as { value?: string }).value || JSON.stringify(response.contents),
         };
+        
+        if (response.range) {
+          result.range = response.range;
+        }
+        
+        return result;
       }
       
       return null;
@@ -231,11 +236,11 @@ export function createLSPHarness(
       const response = await sendRequest('textDocument/completion', {
         textDocument: { uri },
         position,
-      });
+      }) as LSPCompletion[] | { items: LSPCompletion[] } | null;
       
       if (Array.isArray(response)) {
         return response;
-      } else if (response?.items) {
+      } else if (response && 'items' in response) {
         return response.items;
       }
       
@@ -243,20 +248,22 @@ export function createLSPHarness(
     },
   };
 
-  function handleLSPMessage(message: any): void {
-    if (message.id && pendingRequests.has(message.id)) {
-      const { resolve, reject } = pendingRequests.get(message.id)!;
-      pendingRequests.delete(message.id);
+  function handleLSPMessage(message: unknown): void {
+    const msg = message as { id?: number; error?: unknown; result?: unknown };
+    if (msg.id && pendingRequests.has(msg.id)) {
+      const { resolve, reject } = pendingRequests.get(msg.id)!;
+      pendingRequests.delete(msg.id);
       
-      if (message.error) {
-        reject(new Error(message.error.message || 'LSP error'));
+      if (msg.error) {
+        const error = msg.error as { message?: string };
+        reject(new Error(error.message || 'LSP error'));
       } else {
-        resolve(message.result);
+        resolve(msg.result);
       }
     }
   }
 
-  function sendRequest(method: string, params: any): Promise<any> {
+  function sendRequest(method: string, params: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const id = requestId++;
       pendingRequests.set(id, { resolve, reject });
@@ -280,7 +287,7 @@ export function createLSPHarness(
     });
   }
 
-  function sendNotification(method: string, params: any): Promise<void> {
+  function sendNotification(method: string, params: unknown): Promise<void> {
     const message = {
       jsonrpc: '2.0',
       method,
@@ -291,7 +298,7 @@ export function createLSPHarness(
     return Promise.resolve();
   }
 
-  function sendMessage(message: any): void {
+  function sendMessage(message: unknown): void {
     if (!lspProcess?.stdin) {
       throw new Error('LSP process not available');
     }

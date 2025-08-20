@@ -1,6 +1,6 @@
 import { readFile } from 'fs/promises';
 
-export async function loadPrompt(name: string, vars?: Record<string, any>): Promise<string> {
+export async function loadPrompt(name: string, vars?: Record<string, unknown>): Promise<string> {
   const path = `prompts/${name}.md`;
   let content: string;
 

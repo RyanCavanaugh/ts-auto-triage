@@ -14,7 +14,7 @@ export interface TwoslashQuery {
 }
 
 export interface TwoslashConfig {
-  compilerOptions?: Record<string, any>;
+  compilerOptions?: Record<string, unknown>;
   files: TwoslashFile[];
   query?: TwoslashQuery;
 }
@@ -188,7 +188,7 @@ export function createTwoslashParser(logger: Logger): TwoslashParser {
   };
 }
 
-function parseCompilerOptionValue(value: string): any {
+function parseCompilerOptionValue(value: string): unknown {
   // Remove quotes if present
   const cleanValue = value.replace(/^["']|["']$/g, '');
   

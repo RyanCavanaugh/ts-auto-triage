@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
 import { createConsoleLogger } from '../lib/utils.js';
 import { createTwoslashParser } from '../lib/twoslash.js';
-import { createLSPHarness } from '../lib/lsp-harness.js';
+import { createLSPHarness, type LSPSignatureHelp, type LSPHover, type LSPCompletion } from '../lib/lsp-harness.js';
 import { ConfigSchema } from '../lib/schemas.js';
 
 async function main() {
@@ -69,7 +69,7 @@ async function main() {
       await lspHarness.openDocument(queryFile, queryFileContent);
       
       // Execute the requested command
-      let result: any;
+      let result: LSPSignatureHelp | LSPHover | LSPCompletion[] | null;
       switch (command) {
         case 'signature-help':
           result = await lspHarness.getSignatureHelp(queryFile, twoslashConfig.query.position);
@@ -95,7 +95,7 @@ async function main() {
         case 'completions':
           result = await lspHarness.getCompletions(queryFile, twoslashConfig.query.position);
           if (result && result.length > 0) {
-            result.forEach((completion: any) => {
+            result.forEach((completion: LSPCompletion) => {
               console.log(`${completion.label} - ${completion.detail || 'no detail'}`);
             });
           } else {

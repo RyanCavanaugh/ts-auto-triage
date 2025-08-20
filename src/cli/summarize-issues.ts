@@ -4,8 +4,8 @@ import { readFile, writeFile, readdir } from 'fs/promises';
 import { join, basename } from 'path';
 import * as jsonc from 'jsonc-parser';
 import { createConsoleLogger, ensureDirectoryExists } from '../lib/utils.js';
-import { createAIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, EmbeddingsDataSchema, SummariesDataSchema } from '../lib/schemas.js';
+import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
+import { ConfigSchema, GitHubIssueSchema, EmbeddingsDataSchema, SummariesDataSchema, type GitHubIssue, type Config } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -142,12 +142,12 @@ async function main() {
   }
 }
 
-async function createIssueSummaries(ai: any, issue: any, config: any, count = 3): Promise<string[]> {
+async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: Config, count = 3): Promise<string[]> {
   // Truncate body and comments to stay within context limits
   const body = issue.body ? truncateText(issue.body, config.github.maxIssueBodyLength) : '';
   const recentComments = issue.comments
     .slice(-5) // Only use last 5 comments
-    .map((c: any) => truncateText(c.body, config.github.maxCommentLength))
+    .map((c) => truncateText(c.body, config.github.maxCommentLength))
     .join('\n---\n');
 
   const systemPrompt = await loadPrompt('summarize-issue-system');
@@ -155,7 +155,7 @@ async function createIssueSummaries(ai: any, issue: any, config: any, count = 3)
     issueNumber: String(issue.number),
     issueTitle: issue.title,
     issueState: issue.state,
-    labels: issue.labels.map((l: any) => l.name).join(', '),
+    labels: issue.labels.map((l) => l.name).join(', '),
     body,
     recentComments,
   });
@@ -173,7 +173,7 @@ async function createIssueSummaries(ai: any, issue: any, config: any, count = 3)
   // First, try to parse as JSON
   try {
     const parsed = JSON.parse(content);
-    if (Array.isArray(parsed) && parsed.every((x: any) => typeof x === 'string')) {
+    if (Array.isArray(parsed) && parsed.every((x: unknown) => typeof x === 'string')) {
       const trimmed = parsed.map((s: string) => s.trim());
       // Ensure exactly `count` items
       if (trimmed.length >= count) return trimmed.slice(0, count);
@@ -233,7 +233,7 @@ function truncateText(text: string, maxLength: number): string {
   return text.slice(0, maxLength - 3) + '...';
 }
 
-async function saveData(filePath: string, data: Record<string, any>): Promise<void> {
+async function saveData(filePath: string, data: Record<string, unknown>): Promise<void> {
   ensureDirectoryExists(filePath);
   await writeFile(filePath, JSON.stringify(data, null, 2));
 }

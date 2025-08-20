@@ -4,8 +4,8 @@ import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef } from '../lib/utils.js';
-import { createAIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema } from '../lib/schemas.js';
+import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
+import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema, type IssueRef } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -115,7 +115,7 @@ ${JSON.stringify(actionFile, null, 2)}`;
   }
 }
 
-async function checkFAQMatches(ai: any, issueBody: string, issueTitle: string, faqContent: string): Promise<string | null> {
+async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: string, faqContent: string): Promise<string | null> {
   const systemPrompt = await loadPrompt('first-response-system');
   const userPrompt = await loadPrompt('first-response-user', {
     issueTitle,
@@ -134,7 +134,7 @@ async function checkFAQMatches(ai: any, issueBody: string, issueTitle: string, f
   return content === 'NO_MATCH' ? null : content;
 }
 
-async function findDuplicates(ai: any, issueBody: string, issueTitle: string, issueRef: any): Promise<string[]> {
+async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef): Promise<string[]> {
   // Load embeddings and summaries (now arrays per issue)
   let summaries: Record<string, string[]> = {};
   let embeddings: Record<string, string[]> = {};
@@ -169,7 +169,7 @@ async function findDuplicates(ai: any, issueBody: string, issueTitle: string, is
     if (!summaries[issueKey]) continue;
     
     // embeddingValue may be an array of base64 strings (one per summary), but support legacy single-string values too
-    const embeddingList: string[] = Array.isArray(embeddingValue) ? embeddingValue : [embeddingValue as any as string];
+    const embeddingList: string[] = Array.isArray(embeddingValue) ? embeddingValue : [embeddingValue as string];
     
     let bestSim = -Infinity;
     let bestIndex = -1;
@@ -194,7 +194,7 @@ async function findDuplicates(ai: any, issueBody: string, issueTitle: string, is
     // Use the best similarity for the issue and the corresponding summary (if available)
     if (bestIndex >= 0 && bestSim > 0.2) {
       const summariesForKey = summaries[issueKey];
-      const summaryText = Array.isArray(summariesForKey) ? (summariesForKey[bestIndex] ?? summariesForKey[0]) : (summariesForKey as any as string);
+      const summaryText = Array.isArray(summariesForKey) ? (summariesForKey[bestIndex] ?? summariesForKey[0]) : (summariesForKey as string);
       similarities.push({ issueKey, similarity: bestSim, summary: summaryText ?? '' });
     }
   }

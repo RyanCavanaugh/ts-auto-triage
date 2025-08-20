@@ -4,11 +4,11 @@ import { readFile, writeFile, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef } from '../lib/utils.js';
-import { createAIWrapper } from '../lib/ai-wrapper.js';
-import { createLSPHarness } from '../lib/lsp-harness.js';
-import { createTwoslashParser } from '../lib/twoslash.js';
-import { ConfigSchema, GitHubIssueSchema } from '../lib/schemas.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, type Logger } from '../lib/utils.js';
+import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
+import { createLSPHarness, type LSPHarness } from '../lib/lsp-harness.js';
+import { createTwoslashParser, type TwoslashParser } from '../lib/twoslash.js';
+import { ConfigSchema, GitHubIssueSchema, type GitHubIssue, type Config } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 interface ReproAttempt {
@@ -138,7 +138,7 @@ async function main() {
 
 main().catch(console.error);
 
-async function setupWorkspace(workspaceDir: string, config: any, logger: any): Promise<void> {
+async function setupWorkspace(workspaceDir: string, config: Config, logger: Logger): Promise<void> {
   logger.debug(`Setting up workspace at ${workspaceDir}`);
   
   // Clean and create directory
@@ -176,15 +176,15 @@ async function setupWorkspace(workspaceDir: string, config: any, logger: any): P
 }
 
 async function runReproAttempt(
-  ai: any,
-  lspHarness: any,
-  twoslashParser: any,
-  issue: any,
+  ai: AIWrapper,
+  lspHarness: LSPHarness,
+  twoslashParser: TwoslashParser,
+  issue: GitHubIssue,
   workspaceDir: string,
   attemptNum: number,
   previousAttempts: ReproAttempt[],
-  config: any,
-  logger: any
+  config: Config,
+  logger: Logger
 ): Promise<ReproAttempt> {
   const attempt: ReproAttempt = {
     attempt: attemptNum,
@@ -214,8 +214,9 @@ async function runReproAttempt(
         timeout: 30000,
       });
       attempt.tscOutput = tscOutput;
-    } catch (error: any) {
-      attempt.tscOutput = error.stdout + error.stderr;
+    } catch (error: unknown) {
+      const execError = error as { stdout?: string; stderr?: string };
+      attempt.tscOutput = (execError.stdout ?? '') + (execError.stderr ?? '');
     }
 
     // Run LSP analysis if there's a twoslash-style query
@@ -251,11 +252,11 @@ async function runReproAttempt(
   return attempt;
 }
 
-async function generateReproductionCode(ai: any, issue: any, previousAttempts: ReproAttempt[], config: any): Promise<{ approach: string; files: Array<{ filename: string; content: string }> }> {
+async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, previousAttempts: ReproAttempt[], config: Config): Promise<{ approach: string; files: Array<{ filename: string; content: string }> }> {
   const body = issue.body ? issue.body.slice(0, config.github.maxIssueBodyLength) : '';
   const recentComments = issue.comments
     .slice(-3)
-    .map((c: any) => c.body.slice(0, config.github.maxCommentLength))
+    .map((c) => c.body.slice(0, config.github.maxCommentLength))
     .join('\n---\n');
 
   const previousAttemptsText = previousAttempts.map(a => 
@@ -285,7 +286,7 @@ async function generateReproductionCode(ai: any, issue: any, previousAttempts: R
    }
  }
  
- async function analyzeReproResults(ai: any, issue: any, attempt: ReproAttempt, logger: any): Promise<{ analysis: string; success: boolean }> {
+ async function analyzeReproResults(ai: AIWrapper, issue: GitHubIssue, attempt: ReproAttempt, logger: Logger): Promise<{ analysis: string; success: boolean }> {
    const systemPrompt = await loadPrompt('repro-analyze-system');
    const userPrompt = await loadPrompt('repro-analyze-user', {
      issueTitle: issue.title,
@@ -311,7 +312,7 @@ async function generateReproductionCode(ai: any, issue: any, previousAttempts: R
    }
  }
  
- async function generateFinalAnalysis(ai: any, issue: any, attempts: ReproAttempt[], logger: any): Promise<{ summary: string; recommendation: string }> {
+ async function generateFinalAnalysis(ai: AIWrapper, issue: GitHubIssue, attempts: ReproAttempt[], logger: Logger): Promise<{ summary: string; recommendation: string }> {
    const attemptsText = attempts.map(a => 
      `Attempt ${a.attempt}: ${a.approach}\n${a.success ? 'SUCCESS' : 'FAILED'} - ${a.analysis}`
    ).join('\n\n');

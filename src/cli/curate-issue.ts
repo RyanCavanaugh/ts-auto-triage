@@ -4,8 +4,8 @@ import { readFile, writeFile } from 'fs/promises';
 import { Octokit } from '@octokit/rest';
 import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef } from '../lib/utils.js';
-import { createAIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, IssueActionSchema } from '../lib/schemas.js';
+import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
+import { ConfigSchema, GitHubIssueSchema, IssueActionSchema, type IssueRef, type GitHubIssue, type Config, type IssueAction } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -91,7 +91,7 @@ ${JSON.stringify(actionFile, null, 2)}`;
   }
 }
 
-async function getRepositoryMetadata(issueRef: any): Promise<{ labels: string[]; milestones: string[] }> {
+async function getRepositoryMetadata(issueRef: IssueRef): Promise<{ labels: string[]; milestones: string[] }> {
   try {
     // Get GitHub auth token
     const { execSync } = await import('child_process');
@@ -124,23 +124,23 @@ async function getRepositoryMetadata(issueRef: any): Promise<{ labels: string[];
 }
 
 async function getCurationRecommendations(
-  ai: any,
-  issue: any,
+  ai: AIWrapper,
+  issue: GitHubIssue,
   policyContent: string,
   availableLabels: string[],
   availableMilestones: string[],
-  config: any
-): Promise<any[]> {
+  config: Config
+): Promise<IssueAction[]> {
   // Truncate issue content to fit in context
   const body = issue.body ? issue.body.slice(0, config.github.maxIssueBodyLength) : '';
   const recentComments = issue.comments
     .slice(-3)
-    .map((c: any) => `${c.user.login}: ${c.body.slice(0, config.github.maxCommentLength)}`)
+    .map((c) => `${c.user.login}: ${c.body.slice(0, config.github.maxCommentLength)}`)
     .join('\n---\n');
 
   const messages = [
     { role: 'system' as const, content: await loadPrompt('curate-issue-system', { availableLabels: availableLabels.join(', '), availableMilestones: availableMilestones.join(', ') }) },
-    { role: 'user' as const, content: await loadPrompt('curate-issue-user', { policyContent, issueNumber: String(issue.number), issueTitle: issue.title, issueState: issue.state, currentLabels: issue.labels.map((l: any) => l.name).join(', '), author: issue.user.login, authorAssociation: issue.author_association, body, recentComments }) },
+    { role: 'user' as const, content: await loadPrompt('curate-issue-user', { policyContent, issueNumber: String(issue.number), issueTitle: issue.title, issueState: issue.state, currentLabels: issue.labels.map((l) => l.name).join(', '), author: issue.user.login, authorAssociation: issue.author_association, body, recentComments }) },
    ];
 
    const response = await ai.chatCompletion(messages, { maxTokens: 1000 });

@@ -61,3 +61,6 @@ When CLI tools want to modify GitHub issues, they write action files to `.workin
 - All JSON I/O must use Zod schemas
 - CLI entry points are minimal orchestrators, business logic lives in libraries
 - Libraries accept host objects for logging instead of direct console usage
+- **NEVER use `any` type** - use proper types, `unknown`, or specific interface types
+- Prefer `unknown` over `any` when the type is truly unknown
+- Use proper type assertions with specific types instead of `any`
