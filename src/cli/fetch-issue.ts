@@ -39,7 +39,7 @@ async function main() {
     });
 
     // Create issue fetcher
-    const issueFetcher = createIssueFetcher(octokit, config, logger);
+    const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
 
     // Fetch the issue
     const issue = await issueFetcher.fetchIssue(issueRef);

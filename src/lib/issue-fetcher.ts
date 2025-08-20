@@ -1,4 +1,5 @@
 import { Octokit } from '@octokit/rest';
+import { graphql } from '@octokit/graphql';
 import * as fs from 'fs/promises';
 import type { IssueRef, GitHubIssue, Config } from './schemas.js';
 import { GitHubIssueSchema } from './schemas.js';
@@ -12,11 +13,70 @@ export interface IssueFetcher {
   hasLocalIssue(ref: IssueRef): Promise<boolean>;
 }
 
+// GraphQL types for cursor-based pagination
+interface GraphQLIssueNode {
+  number: number;
+  title: string;
+  body: string;
+  state: 'OPEN' | 'CLOSED';
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+  url: string;
+  author: {
+    login: string;
+  } | null;
+  labels: {
+    nodes: Array<{
+      id: string;
+      name: string;
+      color: string;
+      description: string | null;
+    }>;
+  };
+  milestone: {
+    id: string;
+    number: number;
+    title: string;
+    description: string | null;
+    state: 'OPEN' | 'CLOSED';
+  } | null;
+  assignees: {
+    nodes: Array<{
+      login: string;
+      id: string;
+    }>;
+  };
+  reactions: {
+    totalCount: number;
+  };
+}
+
+interface GraphQLIssuesResponse {
+  repository: {
+    issues: {
+      pageInfo: {
+        hasNextPage: boolean;
+        endCursor: string | null;
+      };
+      nodes: GraphQLIssueNode[];
+    };
+  };
+}
+
 export function createIssueFetcher(
   octokit: Octokit,
   config: Config,
-  logger: Logger
+  logger: Logger,
+  authToken: string
 ): IssueFetcher {
+  // Create GraphQL client with auth token
+  const graphqlClient = graphql.defaults({
+    headers: {
+      authorization: `token ${authToken}`,
+    },
+  });
+
   return {
     async fetchIssue(ref: IssueRef): Promise<GitHubIssue> {
       logger.info(`Fetching issue ${ref.owner}/${ref.repo}#${ref.number}`);
@@ -140,42 +200,97 @@ export function createIssueFetcher(
     },
 
     async fetchAllIssues(owner: string, repo: string): Promise<void> {
-      logger.info(`Starting bulk fetch for ${owner}/${repo}`);
+      logger.info(`Starting bulk fetch for ${owner}/${repo} using cursor-based pagination`);
       
-      let page = 1;
-      let hasMore = true;
+      let cursor: string | null = null;
+      let hasNextPage = true;
       let totalFetched = 0;
+      let pageCount = 0;
       
-      while (hasMore) {
+      while (hasNextPage) {
         try {
-          logger.info(`Fetching page ${page} for ${owner}/${repo}`);
+          pageCount++;
+          logger.info(`Fetching page ${pageCount} for ${owner}/${repo} (cursor: ${cursor?.substring(0, 10) || 'none'}...)`);
           
-          const response = await octokit.rest.issues.listForRepo({
+          const query = `
+            query($owner: String!, $repo: String!, $cursor: String) {
+              repository(owner: $owner, name: $repo) {
+                issues(
+                  first: 100,
+                  after: $cursor,
+                  orderBy: { field: UPDATED_AT, direction: DESC },
+                  states: [OPEN, CLOSED]
+                ) {
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
+                  nodes {
+                    number
+                    title
+                    body
+                    state
+                    createdAt
+                    updatedAt
+                    closedAt
+                    url
+                    author {
+                      login
+                    }
+                    labels(first: 50) {
+                      nodes {
+                        id
+                        name
+                        color
+                        description
+                      }
+                    }
+                    milestone {
+                      id
+                      number
+                      title
+                      description
+                      state
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        id
+                      }
+                    }
+                    reactions {
+                      totalCount
+                    }
+                  }
+                }
+              }
+            }
+          `;
+          
+          const response: GraphQLIssuesResponse = await graphqlClient<GraphQLIssuesResponse>(query, {
             owner,
             repo,
-            state: 'all',
-            per_page: 100,
-            page,
-            sort: 'updated',
-            direction: 'desc',
+            cursor,
           });
           
-          if (response.data.length === 0) {
-            hasMore = false;
+          const issues = response.repository.issues;
+          
+          if (issues.nodes.length === 0) {
+            hasNextPage = false;
             break;
           }
           
-          for (const issue of response.data) {
+          for (const issue of issues.nodes) {
             const ref: IssueRef = { owner, repo, number: issue.number };
             
             // Check if we already have this issue and it's up to date
             const localIssue = await this.getLocalIssue(ref);
-            if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updated_at)) {
+            if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updatedAt)) {
               logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
               continue;
             }
             
-            // Fetch the full issue data
+            // Fetch the full issue data using REST API (which includes comments)
             await this.fetchIssue(ref);
             totalFetched++;
             
@@ -183,11 +298,12 @@ export function createIssueFetcher(
             await sleep(100);
           }
           
-          page++;
+          hasNextPage = issues.pageInfo.hasNextPage;
+          cursor = issues.pageInfo.endCursor;
           
         } catch (error) {
           if (error instanceof Error && 'status' in error && error.status === 403) {
-            logger.warn(`Rate limited on page ${page}, waiting...`);
+            logger.warn(`Rate limited on page ${pageCount}, waiting...`);
             await sleep(config.github.rateLimitRetryDelay);
             continue;
           }
@@ -195,7 +311,7 @@ export function createIssueFetcher(
         }
       }
       
-      logger.info(`Completed bulk fetch for ${owner}/${repo}, fetched ${totalFetched} issues`);
+      logger.info(`Completed bulk fetch for ${owner}/${repo}, fetched ${totalFetched} issues across ${pageCount} pages`);
     },
 
     async getLocalIssue(ref: IssueRef): Promise<GitHubIssue | null> {

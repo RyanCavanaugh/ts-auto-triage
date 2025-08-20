@@ -43,7 +43,7 @@ async function main() {
     });
 
     // Create issue fetcher
-    const issueFetcher = createIssueFetcher(octokit, config, logger);
+    const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
 
     // Fetch all issues
     await issueFetcher.fetchAllIssues(owner, repo);
