@@ -1,5 +1,6 @@
-// Note: This is a simplified AI wrapper for demonstration purposes
-// In production, this would integrate with Azure OpenAI
+// Azure OpenAI integration for TypeScript issue management
+import { AzureOpenAI } from 'openai';
+import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity';
 import type { Logger } from './utils.js';
 import { createKVCache } from './kvcache.js';
 
@@ -46,6 +47,29 @@ export interface AIWrapper {
 export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = true): AIWrapper {
   const cache = enableCache ? createKVCache(logger) : null;
 
+  // Create Azure OpenAI client with authentication
+  const client = (() => {
+    const apiKey = process.env.AZURE_OPENAI_API_KEY;
+    if (apiKey) {
+      logger.debug('Using Azure OpenAI API key authentication');
+      return new AzureOpenAI({
+        endpoint: config.endpoint,
+        apiKey,
+        apiVersion: "2024-10-21"
+      });
+    } else {
+      logger.debug('Using Azure managed identity authentication');
+      const credential = new DefaultAzureCredential();
+      const scope = "https://cognitiveservices.azure.com/.default";
+      const azureADTokenProvider = getBearerTokenProvider(credential, scope);
+      return new AzureOpenAI({
+        endpoint: config.endpoint,
+        azureADTokenProvider,
+        apiVersion: "2024-10-21"
+      });
+    }
+  })();
+
   return {
     async chatCompletion(messages: ChatMessage[], options = {}): Promise<ChatCompletionResponse> {
       const model = options.model ?? config.deployments.chat;
@@ -61,24 +85,38 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
 
       logger.debug(`Making chat completion request to ${model}`);
       
-      // TODO: Replace with actual Azure OpenAI integration
-      logger.warn('AI integration placeholder - would call Azure OpenAI here');
-      
-      const simulatedResponse: ChatCompletionResponse = {
-        content: `Simulated AI response for: ${messages[messages.length - 1]?.content?.slice(0, 100)}...`,
-        usage: {
-          prompt_tokens: Math.floor(Math.random() * 1000) + 100,
-          completion_tokens: Math.floor(Math.random() * 500) + 50,
-          total_tokens: Math.floor(Math.random() * 1500) + 150,
-        },
-      };
+      try {
+        const response = await client.chat.completions.create({
+          model: model,
+          messages: messages,
+          max_tokens: options.maxTokens ?? null,
+          temperature: options.temperature ?? null,
+        });
 
-      if (cache && cacheKey) {
-        await cache.memoize(cacheKey, async () => simulatedResponse);
+        const choice = response.choices[0];
+        if (!choice?.message?.content) {
+          throw new Error('No content received from Azure OpenAI');
+        }
+
+        const result: ChatCompletionResponse = {
+          content: choice.message.content,
+          usage: response.usage ? {
+            prompt_tokens: response.usage.prompt_tokens,
+            completion_tokens: response.usage.completion_tokens,
+            total_tokens: response.usage.total_tokens,
+          } : undefined,
+        };
+
+        if (cache && cacheKey) {
+          await cache.memoize(cacheKey, async () => result);
+        }
+
+        logger.debug(`Chat completion successful, ${result.usage?.total_tokens ?? 0} tokens used`);
+        return result;
+      } catch (error) {
+        logger.error(`Azure OpenAI chat completion failed: ${error}`);
+        throw error;
       }
-
-      logger.debug(`Chat completion successful, ${simulatedResponse.usage?.total_tokens ?? 0} tokens used`);
-      return simulatedResponse;
     },
 
     async getEmbedding(text: string, model?: string): Promise<EmbeddingResponse> {
@@ -95,26 +133,35 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
 
       logger.debug(`Making embedding request to ${embeddingModel}`);
       
-      // TODO: Replace with actual Azure OpenAI integration
-      logger.warn('AI integration placeholder - would call Azure OpenAI here');
-      
-      // Generate a simulated embedding vector (1536 dimensions for text-embedding-ada-002)
-      const embedding = Array.from({ length: 1536 }, () => (Math.random() - 0.5) * 2);
-      
-      const simulatedResponse: EmbeddingResponse = {
-        embedding,
-        usage: {
-          prompt_tokens: Math.floor(text.length / 4),
-          total_tokens: Math.floor(text.length / 4),
-        },
-      };
+      try {
+        const response = await client.embeddings.create({
+          model: embeddingModel,
+          input: text,
+        });
 
-      if (cache && cacheKey) {
-        await cache.memoize(cacheKey, async () => simulatedResponse);
+        const embedding = response.data[0]?.embedding;
+        if (!embedding) {
+          throw new Error('No embedding received from Azure OpenAI');
+        }
+
+        const result: EmbeddingResponse = {
+          embedding,
+          usage: response.usage ? {
+            prompt_tokens: response.usage.prompt_tokens,
+            total_tokens: response.usage.total_tokens,
+          } : undefined,
+        };
+
+        if (cache && cacheKey) {
+          await cache.memoize(cacheKey, async () => result);
+        }
+
+        logger.debug(`Embedding successful, ${result.usage?.total_tokens ?? 0} tokens used`);
+        return result;
+      } catch (error) {
+        logger.error(`Azure OpenAI embedding failed: ${error}`);
+        throw error;
       }
-
-      logger.debug(`Embedding successful, ${simulatedResponse.usage?.total_tokens ?? 0} tokens used`);
-      return simulatedResponse;
     },
   };
 }
