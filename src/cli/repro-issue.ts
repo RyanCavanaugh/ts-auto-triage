@@ -4,11 +4,11 @@ import { readFile, writeFile, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, type Logger } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, type Logger } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { createLSPHarness, type LSPHarness } from '../lib/lsp-harness.js';
 import { createTwoslashParser, type TwoslashParser } from '../lib/twoslash.js';
-import { ConfigSchema, GitHubIssueSchema, type GitHubIssue, type Config } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, ReproCodeSchema, ReproAnalysisSchema, FinalAnalysisSchema, type GitHubIssue, type Config, type ReproCode, type ReproAnalysis, type FinalAnalysis } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 interface ReproAttempt {
@@ -268,23 +268,11 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, previ
     { role: 'user' as const, content: await loadPrompt('repro-issue-user', { issueNumber: String(issue.number), issueTitle: issue.title, body, recentComments, previousAttemptsText }) },
   ];
  
-   const response = await ai.chatCompletion(messages, { maxTokens: 2000 });
-   
-   try {
-     return JSON.parse(response.content);
-   } catch {
-     // Fallback if JSON parsing fails
-     return {
-       approach: 'Generated basic reproduction case',
-       files: [
-         {
-           filename: 'main.ts',
-           content: '// Failed to parse AI response\nconsole.log("Unable to generate reproduction");',
-         },
-       ],
-     };
-   }
- }
+  const jsonSchema = zodToJsonSchema(ReproCodeSchema);
+  const response = await ai.structuredCompletion<ReproCode>(messages, jsonSchema, { maxTokens: 2000 });
+  
+  return response;
+}
  
  async function analyzeReproResults(ai: AIWrapper, issue: GitHubIssue, attempt: ReproAttempt, logger: Logger): Promise<{ analysis: string; success: boolean }> {
    const systemPrompt = await loadPrompt('repro-analyze-system');
@@ -300,16 +288,10 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, previ
      { role: 'user' as const, content: userPrompt },
    ];
  
-   const response = await ai.chatCompletion(messages, { maxTokens: 500 });
- 
-   try {
-     return JSON.parse(response.content);
-   } catch {
-     return {
-       success: false,
-       analysis: 'Failed to analyze reproduction results',
-     };
-   }
+   const jsonSchema = zodToJsonSchema(ReproAnalysisSchema);
+   const response = await ai.structuredCompletion<ReproAnalysis>(messages, jsonSchema, { maxTokens: 500 });
+   
+   return response;
  }
  
  async function generateFinalAnalysis(ai: AIWrapper, issue: GitHubIssue, attempts: ReproAttempt[], logger: Logger): Promise<{ summary: string; recommendation: string }> {
@@ -325,13 +307,10 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, previ
      { role: 'user' as const, content: userPrompt },
    ];
  
-   const response = await ai.chatCompletion(messages, { maxTokens: 800 });
- 
-   const parts = response.content.split('RECOMMENDATION:');
-   return {
-     summary: parts[0]?.trim() ?? response.content,
-     recommendation: parts[1]?.trim() ?? 'No specific recommendation provided',
-   };
+   const jsonSchema = zodToJsonSchema(FinalAnalysisSchema);
+   const response = await ai.structuredCompletion<FinalAnalysis>(messages, jsonSchema, { maxTokens: 800 });
+   
+   return response;
  }
 
 function generateMarkdownReport(result: ReproResult): string {

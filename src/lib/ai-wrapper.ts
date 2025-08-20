@@ -41,6 +41,16 @@ export interface AIWrapper {
     model?: string;
   }): Promise<ChatCompletionResponse>;
 
+  structuredCompletion<T>(
+    messages: ChatMessage[],
+    jsonSchema: Record<string, unknown>,
+    options?: {
+      maxTokens?: number;
+      temperature?: number;
+      model?: string;
+    }
+  ): Promise<T>;
+
   getEmbedding(text: string, model?: string): Promise<EmbeddingResponse>;
 }
 
@@ -115,6 +125,68 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         return result;
       } catch (error) {
         logger.error(`Azure OpenAI chat completion failed: ${error}`);
+        throw error;
+      }
+    },
+
+    async structuredCompletion<T>(
+      messages: ChatMessage[],
+      jsonSchema: Record<string, unknown>,
+      options: {
+        maxTokens?: number;
+        temperature?: number;
+        model?: string;
+      } = {}
+    ): Promise<T> {
+      const model = options.model ?? config.deployments.chat;
+      const cacheKey = cache ? JSON.stringify({ messages, model, options, jsonSchema }) : null;
+      
+      if (cache && cacheKey) {
+        const cached = await cache.memoize(cacheKey, async () => null);
+        if (cached) {
+          logger.debug('Using cached structured completion');
+          return cached as T;
+        }
+      }
+
+      logger.debug(`Making structured completion request to ${model}`);
+      
+      try {
+        const response = await client.chat.completions.create({
+          model: model,
+          messages: messages,
+          max_tokens: options.maxTokens ?? null,
+          temperature: options.temperature ?? null,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "response",
+              schema: jsonSchema,
+              strict: true,
+            },
+          },
+        });
+
+        const choice = response.choices[0];
+        if (!choice?.message?.content) {
+          throw new Error('No content received from Azure OpenAI');
+        }
+
+        let result: T;
+        try {
+          result = JSON.parse(choice.message.content) as T;
+        } catch (parseError) {
+          throw new Error(`Failed to parse JSON response: ${parseError}`);
+        }
+
+        if (cache && cacheKey) {
+          await cache.memoize(cacheKey, async () => result);
+        }
+
+        logger.debug(`Structured completion successful, ${response.usage?.total_tokens ?? 0} tokens used`);
+        return result;
+      } catch (error) {
+        logger.error(`Azure OpenAI structured completion failed: ${error}`);
         throw error;
       }
     },

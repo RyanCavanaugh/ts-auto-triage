@@ -3,9 +3,9 @@
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema, type IssueRef } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema, FAQResponseSchema, type IssueRef, type FAQResponse } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -128,10 +128,10 @@ async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: str
     { role: 'user' as const, content: userPrompt },
   ];
 
-  const response = await ai.chatCompletion(messages, { maxTokens: 500 });
-  const content = response.content.trim();
+  const jsonSchema = zodToJsonSchema(FAQResponseSchema);
+  const response = await ai.structuredCompletion<FAQResponse>(messages, jsonSchema, { maxTokens: 500 });
   
-  return content === 'NO_MATCH' ? null : content;
+  return response.has_match ? response.response ?? null : null;
 }
 
 async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef): Promise<string[]> {

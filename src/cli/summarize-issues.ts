@@ -3,9 +3,9 @@
 import { readFile, writeFile, readdir } from 'fs/promises';
 import { join, basename } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { createConsoleLogger, ensureDirectoryExists } from '../lib/utils.js';
+import { createConsoleLogger, ensureDirectoryExists, zodToJsonSchema } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, EmbeddingsDataSchema, SummariesDataSchema, type GitHubIssue, type Config } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, EmbeddingsDataSchema, SummariesDataSchema, IssueSummariesSchema, type GitHubIssue, type Config, type IssueSummaries } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -163,69 +163,23 @@ async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: C
   const messages = [
     { role: 'system' as const, content: systemPrompt },
     { role: 'user' as const, content: userPrompt },
-    // Request structured output: a JSON array of summaries
-    { role: 'user' as const, content: `Please provide exactly ${count} concise summaries as a JSON array of strings. Example: ["summary one", "summary two", "summary three"]. Each summary should be no longer than 200 words. Return only the JSON array.` },
   ];
 
-  const response = await ai.chatCompletion(messages, { maxTokens: 800 });
-  const content = response.content.trim();
-
-  // First, try to parse as JSON
-  try {
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed) && parsed.every((x: unknown) => typeof x === 'string')) {
-      const trimmed = parsed.map((s: string) => s.trim());
-      // Ensure exactly `count` items
-      if (trimmed.length >= count) return trimmed.slice(0, count);
-      while (trimmed.length < count) trimmed.push(trimmed[trimmed.length - 1] || '');
-      return trimmed;
-    }
-  } catch {
-    // Not JSON, fall through to heuristic parsing
+  const jsonSchema = zodToJsonSchema(IssueSummariesSchema);
+  const response = await ai.structuredCompletion<IssueSummaries>(messages, jsonSchema, { maxTokens: 800 });
+  
+  // Ensure we have exactly the requested count
+  if (response.length >= count) {
+    return response.slice(0, count);
   }
-
-  // Heuristic parsing: split on paragraphs, bullets, or lines
-  function parseSummariesFromText(text: string, desired: number): string[] {
-    const paragraphs = text.split(/\r?\n\s*\r?\n/).map(p => p.trim()).filter(Boolean);
-    if (paragraphs.length >= 1) {
-      const cleaned = paragraphs.map(p => p.replace(/^[-*•\u2022]\s+/, '').replace(/^\d+[\.)]\s+/, '').trim());
-      if (cleaned.length >= desired) return cleaned.slice(0, desired);
-      while (cleaned.length < desired) cleaned.push(cleaned[cleaned.length - 1] || '');
-      return cleaned;
-    }
-
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const bullets = lines.filter(l => /^[-*•\u2022]\s+/.test(l) || /^\d+[\.)]\s+/.test(l));
-    if (bullets.length > 0) {
-      const items = bullets.map(l => l.replace(/^[-*•\u2022]\s+/, '').replace(/^\d+[\.)]\s+/, '').trim());
-      if (items.length >= desired) return items.slice(0, desired);
-      while (items.length < desired) items.push(items[items.length - 1] || '');
-      return items;
-    }
-
-    if (lines.length > 0) {
-      const chunkSize = Math.max(1, Math.ceil(lines.length / desired));
-      const chunks: string[] = [];
-      for (let i = 0; i < desired; i++) {
-        const start = i * chunkSize;
-        const seg = lines.slice(start, start + chunkSize).join(' ');
-        if (seg.trim()) chunks.push(seg.trim());
-      }
-      if (chunks.length > 0) {
-        while (chunks.length < desired) chunks.push(chunks[chunks.length - 1] || '');
-        return chunks;
-      }
-    }
-
-    // Fallback: repeat the entire text
-    const fallback = text.replace(/\s+/g, ' ').trim();
-    const out = [] as string[];
-    for (let i = 0; i < desired; i++) out.push(fallback);
-    return out;
+  
+  // If we got fewer than requested, pad with the last summary
+  const padded = [...response];
+  while (padded.length < count) {
+    padded.push(padded[padded.length - 1] ?? '');
   }
-
-  const heuristics = parseSummariesFromText(content, count);
-  return heuristics;
+  
+  return padded;
 }
 
 function truncateText(text: string, maxLength: number): string {

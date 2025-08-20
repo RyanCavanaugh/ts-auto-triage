@@ -130,3 +130,39 @@ export const SummariesDataSchema = z.record(z.array(z.string())); // issue summa
 
 export type EmbeddingsData = z.infer<typeof EmbeddingsDataSchema>;
 export type SummariesData = z.infer<typeof SummariesDataSchema>;
+
+// AI Response Schemas
+export const FAQResponseSchema = z.object({
+  has_match: z.boolean(),
+  response: z.string().optional(), // Only present when has_match is true
+});
+
+export type FAQResponse = z.infer<typeof FAQResponseSchema>;
+
+export const ReproCodeSchema = z.object({
+  approach: z.string(),
+  files: z.array(z.object({
+    filename: z.string(),
+    content: z.string(),
+  })),
+});
+
+export type ReproCode = z.infer<typeof ReproCodeSchema>;
+
+export const ReproAnalysisSchema = z.object({
+  success: z.boolean(),
+  analysis: z.string(),
+});
+
+export type ReproAnalysis = z.infer<typeof ReproAnalysisSchema>;
+
+export const FinalAnalysisSchema = z.object({
+  summary: z.string(),
+  recommendation: z.string(),
+});
+
+export type FinalAnalysis = z.infer<typeof FinalAnalysisSchema>;
+
+export const IssueSummariesSchema = z.array(z.string());
+
+export type IssueSummaries = z.infer<typeof IssueSummariesSchema>;

@@ -96,3 +96,56 @@ export function createMockLogger(): Logger {
     debug: () => {},
   };
 }
+
+import { z } from 'zod';
+
+export function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
+  // Simple conversion for basic Zod schemas to JSON Schema
+  // This is a minimal implementation for the schemas we use
+  
+  if (schema instanceof z.ZodObject) {
+    const shape = schema.shape;
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    
+    for (const [key, value] of Object.entries(shape)) {
+      properties[key] = zodToJsonSchema(value as z.ZodType);
+      if (!(value instanceof z.ZodOptional)) {
+        required.push(key);
+      }
+    }
+    
+    return {
+      type: 'object',
+      properties,
+      required,
+      additionalProperties: false,
+    };
+  }
+  
+  if (schema instanceof z.ZodString) {
+    return { type: 'string' };
+  }
+  
+  if (schema instanceof z.ZodNumber) {
+    return { type: 'number' };
+  }
+  
+  if (schema instanceof z.ZodBoolean) {
+    return { type: 'boolean' };
+  }
+  
+  if (schema instanceof z.ZodArray) {
+    return {
+      type: 'array',
+      items: zodToJsonSchema(schema.element),
+    };
+  }
+  
+  if (schema instanceof z.ZodOptional) {
+    return zodToJsonSchema(schema.unwrap());
+  }
+  
+  // Fallback for unsupported types
+  return { type: 'string' };
+}
