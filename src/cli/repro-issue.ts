@@ -9,6 +9,7 @@ import { createAIWrapper } from '../lib/ai-wrapper.js';
 import { createLSPHarness } from '../lib/lsp-harness.js';
 import { createTwoslashParser } from '../lib/twoslash.js';
 import { ConfigSchema, GitHubIssueSchema } from '../lib/schemas.js';
+import { loadPrompt } from '../lib/prompts.js';
 
 interface ReproAttempt {
   attempt: number;
@@ -262,135 +263,75 @@ async function generateReproductionCode(ai: any, issue: any, previousAttempts: R
   ).join('\n\n');
 
   const messages = [
-    {
-      role: 'system' as const,
-      content: `You are an expert TypeScript developer who reproduces GitHub issues. Create minimal, focused reproduction cases.
-
-Respond with JSON containing:
-{
-  "approach": "Brief description of your reproduction strategy",
-  "files": [
-    {"filename": "main.ts", "content": "// TypeScript code here"}
-  ]
-}
-
-Guidelines:
-- Create the smallest possible reproduction
-- Use modern TypeScript syntax
-- Include /*!*/ markers for LSP queries when relevant
-- Focus on the core issue, not edge cases
-- If it's a compiler error, show the error
-- If it's LSP behavior, use hover/completion queries`,
-    },
-    {
-      role: 'user' as const,
-      content: `Issue #${issue.number}: ${issue.title}
-
-Body:
-${body}
-
-Recent Comments:
-${recentComments}
-
-Previous Attempts:
-${previousAttemptsText}
-
-Create a reproduction case for this issue.`,
-    },
+    { role: 'system' as const, content: await loadPrompt('repro-issue-system') },
+    { role: 'user' as const, content: await loadPrompt('repro-issue-user', { issueNumber: String(issue.number), issueTitle: issue.title, body, recentComments, previousAttemptsText }) },
   ];
-
-  const response = await ai.chatCompletion(messages, { maxTokens: 2000 });
-  
-  try {
-    return JSON.parse(response.content);
-  } catch {
-    // Fallback if JSON parsing fails
-    return {
-      approach: 'Generated basic reproduction case',
-      files: [
-        {
-          filename: 'main.ts',
-          content: '// Failed to parse AI response\nconsole.log("Unable to generate reproduction");',
-        },
-      ],
-    };
-  }
-}
-
-async function analyzeReproResults(ai: any, issue: any, attempt: ReproAttempt, logger: any): Promise<{ analysis: string; success: boolean }> {
-  const messages = [
-    {
-      role: 'system' as const,
-      content: `You are analyzing a TypeScript issue reproduction attempt. Determine if the reproduction successfully demonstrates the reported issue.
-
-Respond with JSON:
-{
-  "success": true/false,
-  "analysis": "Detailed explanation of the results and whether they match the reported issue"
-}`,
-    },
-    {
-      role: 'user' as const,
-      content: `Original Issue: ${issue.title}
-
-Approach: ${attempt.approach}
-
-TSC Output:
-${attempt.tscOutput ?? 'No TSC output'}
-
-LSP Output:
-${attempt.lspOutput ?? 'No LSP output'}
-
-Does this reproduction successfully demonstrate the reported issue?`,
-    },
-  ];
-
-  const response = await ai.chatCompletion(messages, { maxTokens: 500 });
-  
-  try {
-    return JSON.parse(response.content);
-  } catch {
-    return {
-      success: false,
-      analysis: 'Failed to analyze reproduction results',
-    };
-  }
-}
-
-async function generateFinalAnalysis(ai: any, issue: any, attempts: ReproAttempt[], logger: any): Promise<{ summary: string; recommendation: string }> {
-  const attemptsText = attempts.map(a => 
-    `Attempt ${a.attempt}: ${a.approach}\n${a.success ? 'SUCCESS' : 'FAILED'} - ${a.analysis}`
-  ).join('\n\n');
-
-  const messages = [
-    {
-      role: 'system' as const,
-      content: `You are summarizing TypeScript issue reproduction results. Create a professional summary suitable for showing to the issue reporter.
-
-Focus on:
-- Whether the issue was successfully reproduced
-- Technical details of the findings
-- Recommendations for next steps`,
-    },
-    {
-      role: 'user' as const,
-      content: `Issue: ${issue.title}
-
-Reproduction Attempts:
-${attemptsText}
-
-Provide a summary and recommendation.`,
-    },
-  ];
-
-  const response = await ai.chatCompletion(messages, { maxTokens: 800 });
-  
-  const parts = response.content.split('RECOMMENDATION:');
-  return {
-    summary: parts[0]?.trim() ?? response.content,
-    recommendation: parts[1]?.trim() ?? 'No specific recommendation provided',
-  };
-}
+ 
+   const response = await ai.chatCompletion(messages, { maxTokens: 2000 });
+   
+   try {
+     return JSON.parse(response.content);
+   } catch {
+     // Fallback if JSON parsing fails
+     return {
+       approach: 'Generated basic reproduction case',
+       files: [
+         {
+           filename: 'main.ts',
+           content: '// Failed to parse AI response\nconsole.log("Unable to generate reproduction");',
+         },
+       ],
+     };
+   }
+ }
+ 
+ async function analyzeReproResults(ai: any, issue: any, attempt: ReproAttempt, logger: any): Promise<{ analysis: string; success: boolean }> {
+   const systemPrompt = await loadPrompt('repro-analyze-system');
+   const userPrompt = await loadPrompt('repro-analyze-user', {
+     issueTitle: issue.title,
+     attemptApproach: attempt.approach,
+     tscOutput: attempt.tscOutput ?? 'No TSC output',
+     lspOutput: attempt.lspOutput ?? 'No LSP output',
+   });
+ 
+   const messages = [
+     { role: 'system' as const, content: systemPrompt },
+     { role: 'user' as const, content: userPrompt },
+   ];
+ 
+   const response = await ai.chatCompletion(messages, { maxTokens: 500 });
+ 
+   try {
+     return JSON.parse(response.content);
+   } catch {
+     return {
+       success: false,
+       analysis: 'Failed to analyze reproduction results',
+     };
+   }
+ }
+ 
+ async function generateFinalAnalysis(ai: any, issue: any, attempts: ReproAttempt[], logger: any): Promise<{ summary: string; recommendation: string }> {
+   const attemptsText = attempts.map(a => 
+     `Attempt ${a.attempt}: ${a.approach}\n${a.success ? 'SUCCESS' : 'FAILED'} - ${a.analysis}`
+   ).join('\n\n');
+ 
+   const systemPrompt = await loadPrompt('repro-final-analysis-system');
+   const userPrompt = await loadPrompt('repro-final-analysis-user', { issueTitle: issue.title, attemptsText });
+ 
+   const messages = [
+     { role: 'system' as const, content: systemPrompt },
+     { role: 'user' as const, content: userPrompt },
+   ];
+ 
+   const response = await ai.chatCompletion(messages, { maxTokens: 800 });
+ 
+   const parts = response.content.split('RECOMMENDATION:');
+   return {
+     summary: parts[0]?.trim() ?? response.content,
+     recommendation: parts[1]?.trim() ?? 'No specific recommendation provided',
+   };
+ }
 
 function generateMarkdownReport(result: ReproResult): string {
   return `# Issue Reproduction Report

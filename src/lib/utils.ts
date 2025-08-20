@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import type { IssueRef } from './schemas.js';
 
 export function parseIssueRef(input: string): IssueRef {
@@ -59,15 +60,9 @@ export function createCachePath(key: string): string {
 }
 
 function createSimpleHash(input: string): string {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  // Ensure we always get a 16-character hex string
-  const hexHash = Math.abs(hash).toString(16);
-  return hexHash.padStart(16, '0');
+  // Use Node's built-in crypto to create a SHA-256 hash and return the full hex digest.
+  // The caller (createCacheKey) slices the first N hex chars when needed.
+  return crypto.createHash('sha256').update(input).digest('hex');
 }
 
 export function ensureDirectoryExists(filePath: string): void {

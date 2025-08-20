@@ -12,6 +12,7 @@
     "curate-issue": "dist/cli/curate-issue.js",
     "exec-action": "dist/cli/exec-action.js",
     "first-response": "dist/cli/first-response.js",
+    "check-ai": "dist/cli/check-ai.js",
     "twoslash": "dist/cli/twoslash.js"
   },
   "scripts": {

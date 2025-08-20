@@ -125,8 +125,8 @@ export const ConfigSchema = z.object({
 
 export type Config = z.infer<typeof ConfigSchema>;
 
-export const EmbeddingsDataSchema = z.record(z.string()); // base64 encoded embeddings
-export const SummariesDataSchema = z.record(z.string()); // issue summaries
+export const EmbeddingsDataSchema = z.record(z.array(z.string())); // base64 encoded embeddings per issue (array of embeddings, one per summary)
+export const SummariesDataSchema = z.record(z.array(z.string())); // issue summaries (array of alternative summaries per issue)
 
 export type EmbeddingsData = z.infer<typeof EmbeddingsDataSchema>;
 export type SummariesData = z.infer<typeof SummariesDataSchema>;

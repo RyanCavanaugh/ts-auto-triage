@@ -6,6 +6,7 @@ import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef } from '../lib/utils.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema } from '../lib/schemas.js';
+import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -115,30 +116,16 @@ ${JSON.stringify(actionFile, null, 2)}`;
 }
 
 async function checkFAQMatches(ai: any, issueBody: string, issueTitle: string, faqContent: string): Promise<string | null> {
+  const systemPrompt = await loadPrompt('first-response-system');
+  const userPrompt = await loadPrompt('first-response-user', {
+    issueTitle,
+    issueBody: issueBody.slice(0, 4000),
+    faqContent,
+  });
+
   const messages = [
-    {
-      role: 'system' as const,
-      content: `You are analyzing a GitHub issue to see if it matches any FAQ entries. 
-If there's a strong match (>80% confidence), respond with a personalized message that:
-1. Addresses the user's specific question
-2. References the relevant FAQ section
-3. Is helpful and not dismissive
-4. Maintains a professional, technical tone
-
-If no strong match exists, respond with "NO_MATCH".`,
-    },
-    {
-      role: 'user' as const,
-      content: `Issue Title: ${issueTitle}
-
-Issue Body:
-${issueBody.slice(0, 4000)}
-
-FAQ Content:
-${faqContent}
-
-Does this issue match any FAQ entry strongly enough to warrant an automatic response?`,
-    },
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userPrompt },
   ];
 
   const response = await ai.chatCompletion(messages, { maxTokens: 500 });
@@ -148,9 +135,9 @@ Does this issue match any FAQ entry strongly enough to warrant an automatic resp
 }
 
 async function findDuplicates(ai: any, issueBody: string, issueTitle: string, issueRef: any): Promise<string[]> {
-  // Load embeddings and summaries
-  let summaries: Record<string, string> = {};
-  let embeddings: Record<string, string> = {};
+  // Load embeddings and summaries (now arrays per issue)
+  let summaries: Record<string, string[]> = {};
+  let embeddings: Record<string, string[]> = {};
   
   try {
     const summariesContent = await readFile('.data/summaries.json', 'utf-8');
@@ -173,7 +160,7 @@ async function findDuplicates(ai: any, issueBody: string, issueTitle: string, is
   // Calculate similarities
   const similarities: Array<{ issueKey: string; similarity: number; summary: string }> = [];
   
-  for (const [issueKey, embeddingBase64] of Object.entries(embeddings)) {
+  for (const [issueKey, embeddingValue] of Object.entries(embeddings)) {
     // Skip self
     const issueKeyStr = `${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}#${issueRef.number}`;
     if (issueKey === issueKeyStr) continue;
@@ -181,19 +168,34 @@ async function findDuplicates(ai: any, issueBody: string, issueTitle: string, is
     // Skip if no summary
     if (!summaries[issueKey]) continue;
     
-    // Decode embedding
-    const embeddingBuffer = Buffer.from(embeddingBase64, 'base64');
-    const embeddingArray = new Float32Array(embeddingBuffer.buffer);
+    // embeddingValue may be an array of base64 strings (one per summary), but support legacy single-string values too
+    const embeddingList: string[] = Array.isArray(embeddingValue) ? embeddingValue : [embeddingValue as any as string];
     
-    // Calculate cosine similarity
-    const similarity = cosineSimilarity(currentEmbedding.embedding, Array.from(embeddingArray));
+    let bestSim = -Infinity;
+    let bestIndex = -1;
     
-    if (similarity > 0.8) { // High similarity threshold
-      similarities.push({
-        issueKey,
-        similarity,
-        summary: summaries[issueKey]!,
-      });
+    for (let i = 0; i < embeddingList.length; i++) {
+      const base64 = embeddingList[i];
+      if (!base64) continue; // guard against undefined
+      try {
+        const embeddingBuffer = Buffer.from(base64, 'base64');
+        const embeddingArray = new Float32Array(embeddingBuffer.buffer);
+        if (!embeddingArray || embeddingArray.length !== currentEmbedding.embedding.length) continue;
+        const similarity = cosineSimilarity(currentEmbedding.embedding, Array.from(embeddingArray));
+        if (similarity > bestSim) {
+          bestSim = similarity;
+          bestIndex = i;
+        }
+      } catch {
+        continue;
+      }
+    }
+    
+    // Use the best similarity for the issue and the corresponding summary (if available)
+    if (bestIndex >= 0 && bestSim > 0.2) {
+      const summariesForKey = summaries[issueKey];
+      const summaryText = Array.isArray(summariesForKey) ? (summariesForKey[bestIndex] ?? summariesForKey[0]) : (summariesForKey as any as string);
+      similarities.push({ issueKey, similarity: bestSim, summary: summaryText ?? '' });
     }
   }
   

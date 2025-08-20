@@ -34,6 +34,12 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
         // Cache miss, compute and store
         logger.debug(`Cache miss for key: ${key}, computing...`);
         const result = await compute();
+
+        // If the computed value is explicitly null, don't create a cache file.
+        if (result === null) {
+          logger.debug(`Computed result is null for key: ${key}; not creating cache file`);
+          return result;
+        }
         
         try {
           ensureDirectoryExists(cachePath);

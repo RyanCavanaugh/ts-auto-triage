@@ -7,7 +7,7 @@
   "azure": {
     "openai": {
       // Update these endpoints as needed
-      "endpoint": "https://your-resource.openai.azure.com/",
+      "endpoint": "https://ryanca-aoai.openai.azure.com/",
       "deployments": {
         "chat": "gpt-4o",
         "embeddings": "text-embedding-3-large"

@@ -6,6 +6,7 @@ import * as jsonc from 'jsonc-parser';
 import { createConsoleLogger, ensureDirectoryExists } from '../lib/utils.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, EmbeddingsDataSchema, SummariesDataSchema } from '../lib/schemas.js';
+import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -40,9 +41,9 @@ async function main() {
     const summariesPath = '.data/summaries.json';
     const embeddingsPath = '.data/embeddings.json';
     
-    let existingSummaries: Record<string, string> = {};
-    let existingEmbeddings: Record<string, string> = {};
-    
+    let existingSummaries: Record<string, string[]> = {};
+    let existingEmbeddings: Record<string, string[]> = {};
+     
     try {
       const summariesContent = await readFile(summariesPath, 'utf-8');
       existingSummaries = SummariesDataSchema.parse(JSON.parse(summariesContent));
@@ -78,8 +79,11 @@ async function main() {
       const issueNumber = basename(filePath, '.json');
       const issueKey = `${owner.toLowerCase()}/${repo.toLowerCase()}#${issueNumber}`;
 
-      // Skip if already processed
-      if (existingSummaries[issueKey] && existingEmbeddings[issueKey]) {
+      // Skip if already processed (both summaries and embeddings must be present)
+      if (
+        existingSummaries[issueKey] && Array.isArray(existingSummaries[issueKey]) && existingSummaries[issueKey].length > 0 &&
+        existingEmbeddings[issueKey] && Array.isArray(existingEmbeddings[issueKey]) && existingEmbeddings[issueKey].length > 0
+      ) {
         skippedCount++;
         continue;
       }
@@ -91,20 +95,24 @@ async function main() {
         const issueContent = await readFile(filePath, 'utf-8');
         const issue = GitHubIssueSchema.parse(JSON.parse(issueContent));
 
-        // Create summary if not exists
-        if (!existingSummaries[issueKey]) {
-          const summary = await createIssueSummary(ai, issue, config);
-          existingSummaries[issueKey] = summary;
-          logger.debug(`Created summary for ${issueKey}`);
+        // Create summaries (array) if not exists
+        if (!existingSummaries[issueKey] || existingSummaries[issueKey].length === 0) {
+          const summaries = await createIssueSummaries(ai, issue, config, 3);
+          existingSummaries[issueKey] = summaries;
+          logger.debug(`Created summaries for ${issueKey}`);
         }
 
-        // Create embedding if not exists
-        if (!existingEmbeddings[issueKey]) {
-          const summary = existingSummaries[issueKey]!;
-          const embeddingResponse = await ai.getEmbedding(summary);
-          const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
-          existingEmbeddings[issueKey] = embeddingBase64;
-          logger.debug(`Created embedding for ${issueKey}`);
+        // Create embeddings array (one per summary) if not exists
+        if (!existingEmbeddings[issueKey] || existingEmbeddings[issueKey].length === 0) {
+          const summariesForIssue = existingSummaries[issueKey]!;
+          const embeddingBase64Array: string[] = [];
+          for (const s of summariesForIssue) {
+            const embeddingResponse = await ai.getEmbedding(s);
+            const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
+            embeddingBase64Array.push(embeddingBase64);
+          }
+          existingEmbeddings[issueKey] = embeddingBase64Array;
+          logger.debug(`Created embeddings for ${issueKey}`);
         }
 
         processedCount++;
@@ -134,7 +142,7 @@ async function main() {
   }
 }
 
-async function createIssueSummary(ai: any, issue: any, config: any): Promise<string> {
+async function createIssueSummaries(ai: any, issue: any, config: any, count = 3): Promise<string[]> {
   // Truncate body and comments to stay within context limits
   const body = issue.body ? truncateText(issue.body, config.github.maxIssueBodyLength) : '';
   const recentComments = issue.comments
@@ -142,34 +150,82 @@ async function createIssueSummary(ai: any, issue: any, config: any): Promise<str
     .map((c: any) => truncateText(c.body, config.github.maxCommentLength))
     .join('\n---\n');
 
+  const systemPrompt = await loadPrompt('summarize-issue-system');
+  const userPrompt = await loadPrompt('summarize-issue-user', {
+    issueNumber: String(issue.number),
+    issueTitle: issue.title,
+    issueState: issue.state,
+    labels: issue.labels.map((l: any) => l.name).join(', '),
+    body,
+    recentComments,
+  });
+
   const messages = [
-    {
-      role: 'system' as const,
-      content: `You are an expert at summarizing GitHub issues for a TypeScript repository. Create a concise one-paragraph summary that captures:
-1. The main problem or feature request
-2. Key technical details
-3. Current status/resolution if apparent
-4. Impact or importance
-
-Be technical but clear. Focus on facts, not emotions. Keep it under 200 words.`,
-    },
-    {
-      role: 'user' as const,
-      content: `Issue #${issue.number}: ${issue.title}
-
-State: ${issue.state}
-Labels: ${issue.labels.map((l: any) => l.name).join(', ')}
-
-Body:
-${body}
-
-Recent Comments:
-${recentComments}`,
-    },
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userPrompt },
+    // Request structured output: a JSON array of summaries
+    { role: 'user' as const, content: `Please provide exactly ${count} concise summaries as a JSON array of strings. Example: ["summary one", "summary two", "summary three"]. Each summary should be no longer than 200 words. Return only the JSON array.` },
   ];
 
-  const response = await ai.chatCompletion(messages, { maxTokens: 300 });
-  return response.content.trim();
+  const response = await ai.chatCompletion(messages, { maxTokens: 800 });
+  const content = response.content.trim();
+
+  // First, try to parse as JSON
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed) && parsed.every((x: any) => typeof x === 'string')) {
+      const trimmed = parsed.map((s: string) => s.trim());
+      // Ensure exactly `count` items
+      if (trimmed.length >= count) return trimmed.slice(0, count);
+      while (trimmed.length < count) trimmed.push(trimmed[trimmed.length - 1] || '');
+      return trimmed;
+    }
+  } catch {
+    // Not JSON, fall through to heuristic parsing
+  }
+
+  // Heuristic parsing: split on paragraphs, bullets, or lines
+  function parseSummariesFromText(text: string, desired: number): string[] {
+    const paragraphs = text.split(/\r?\n\s*\r?\n/).map(p => p.trim()).filter(Boolean);
+    if (paragraphs.length >= 1) {
+      const cleaned = paragraphs.map(p => p.replace(/^[-*•\u2022]\s+/, '').replace(/^\d+[\.)]\s+/, '').trim());
+      if (cleaned.length >= desired) return cleaned.slice(0, desired);
+      while (cleaned.length < desired) cleaned.push(cleaned[cleaned.length - 1] || '');
+      return cleaned;
+    }
+
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const bullets = lines.filter(l => /^[-*•\u2022]\s+/.test(l) || /^\d+[\.)]\s+/.test(l));
+    if (bullets.length > 0) {
+      const items = bullets.map(l => l.replace(/^[-*•\u2022]\s+/, '').replace(/^\d+[\.)]\s+/, '').trim());
+      if (items.length >= desired) return items.slice(0, desired);
+      while (items.length < desired) items.push(items[items.length - 1] || '');
+      return items;
+    }
+
+    if (lines.length > 0) {
+      const chunkSize = Math.max(1, Math.ceil(lines.length / desired));
+      const chunks: string[] = [];
+      for (let i = 0; i < desired; i++) {
+        const start = i * chunkSize;
+        const seg = lines.slice(start, start + chunkSize).join(' ');
+        if (seg.trim()) chunks.push(seg.trim());
+      }
+      if (chunks.length > 0) {
+        while (chunks.length < desired) chunks.push(chunks[chunks.length - 1] || '');
+        return chunks;
+      }
+    }
+
+    // Fallback: repeat the entire text
+    const fallback = text.replace(/\s+/g, ' ').trim();
+    const out = [] as string[];
+    for (let i = 0; i < desired; i++) out.push(fallback);
+    return out;
+  }
+
+  const heuristics = parseSummariesFromText(content, count);
+  return heuristics;
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -177,7 +233,7 @@ function truncateText(text: string, maxLength: number): string {
   return text.slice(0, maxLength - 3) + '...';
 }
 
-async function saveData(filePath: string, data: Record<string, string>): Promise<void> {
+async function saveData(filePath: string, data: Record<string, any>): Promise<void> {
   ensureDirectoryExists(filePath);
   await writeFile(filePath, JSON.stringify(data, null, 2));
 }

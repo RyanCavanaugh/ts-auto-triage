@@ -6,6 +6,7 @@ import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef } from '../lib/utils.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, IssueActionSchema } from '../lib/schemas.js';
+import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -138,74 +139,40 @@ async function getCurationRecommendations(
     .join('\n---\n');
 
   const messages = [
-    {
-      role: 'system' as const,
-      content: `You are an expert GitHub issue curator for a TypeScript repository. Analyze the issue and recommend curation actions based on the policy.
+    { role: 'system' as const, content: await loadPrompt('curate-issue-system', { availableLabels: availableLabels.join(', '), availableMilestones: availableMilestones.join(', ') }) },
+    { role: 'user' as const, content: await loadPrompt('curate-issue-user', { policyContent, issueNumber: String(issue.number), issueTitle: issue.title, issueState: issue.state, currentLabels: issue.labels.map((l: any) => l.name).join(', '), author: issue.user.login, authorAssociation: issue.author_association, body, recentComments }) },
+   ];
 
-Available actions:
-- add_label: Add a label (must be from available labels list)
-- remove_label: Remove a label
-- close_issue: Close with reason "completed" or "not_planned"
-- add_comment: Post a comment
-- set_milestone: Set milestone (must be from available milestones list)
-- assign_user: Assign to a user
-
-Respond with a JSON array of action objects. Each action must have a "kind" field and appropriate parameters.
-If no actions are needed, return an empty array.
-
-Available labels: ${availableLabels.join(', ')}
-Available milestones: ${availableMilestones.join(', ')}`,
-    },
-    {
-      role: 'user' as const,
-      content: `Policy:
-${policyContent}
-
-Issue #${issue.number}: ${issue.title}
-State: ${issue.state}
-Current Labels: ${issue.labels.map((l: any) => l.name).join(', ')}
-Author: ${issue.user.login} (${issue.author_association})
-
-Body:
-${body}
-
-Recent Comments:
-${recentComments}
-
-What curation actions do you recommend?`,
-    },
-  ];
-
-  const response = await ai.chatCompletion(messages, { maxTokens: 1000 });
-  
-  try {
-    const actions = JSON.parse(response.content);
-    
-    // Validate actions against schema
-    const validActions = [];
-    for (const action of actions) {
-      try {
-        const validatedAction = IssueActionSchema.parse(action);
-        
-        // Additional validation for label/milestone existence
-        if (validatedAction.kind === 'add_label' && !availableLabels.includes(validatedAction.label)) {
-          continue; // Skip invalid label
-        }
-        if (validatedAction.kind === 'set_milestone' && !availableMilestones.includes(validatedAction.milestone)) {
-          continue; // Skip invalid milestone
-        }
-        
-        validActions.push(validatedAction);
-      } catch {
-        continue; // Skip invalid actions
-      }
-    }
-    
-    return validActions;
-  } catch {
-    // If JSON parsing fails, return empty array
-    return [];
-  }
-}
+   const response = await ai.chatCompletion(messages, { maxTokens: 1000 });
+   
+   try {
+     const actions = JSON.parse(response.content);
+     
+     // Validate actions against schema
+     const validActions = [];
+     for (const action of actions) {
+       try {
+         const validatedAction = IssueActionSchema.parse(action);
+         
+         // Additional validation for label/milestone existence
+         if (validatedAction.kind === 'add_label' && !availableLabels.includes(validatedAction.label)) {
+           continue; // Skip invalid label
+         }
+         if (validatedAction.kind === 'set_milestone' && !availableMilestones.includes(validatedAction.milestone)) {
+           continue; // Skip invalid milestone
+         }
+         
+         validActions.push(validatedAction);
+       } catch {
+         continue; // Skip invalid actions
+       }
+     }
+     
+     return validActions;
+   } catch {
+     // If JSON parsing fails, return empty array
+     return [];
+   }
+ }
 
 main().catch(console.error);
