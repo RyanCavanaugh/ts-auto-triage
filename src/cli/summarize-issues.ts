@@ -166,20 +166,8 @@ async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: C
   ];
 
   const jsonSchema = zodToJsonSchema(IssueSummariesSchema);
-  const response = await ai.structuredCompletion<IssueSummaries>(messages, jsonSchema, { maxTokens: 800 });
-  
-  // Ensure we have exactly the requested count
-  if (response.length >= count) {
-    return response.slice(0, count);
-  }
-  
-  // If we got fewer than requested, pad with the last summary
-  const padded = [...response];
-  while (padded.length < count) {
-    padded.push(padded[padded.length - 1] ?? '');
-  }
-  
-  return padded;
+  const response = await ai.structuredCompletion<IssueSummaries>(messages, jsonSchema, { maxTokens: 1200 });
+  return response.summaries;
 }
 
 function truncateText(text: string, maxLength: number): string {

@@ -163,6 +163,8 @@ export const FinalAnalysisSchema = z.object({
 
 export type FinalAnalysis = z.infer<typeof FinalAnalysisSchema>;
 
-export const IssueSummariesSchema = z.array(z.string());
+export const IssueSummariesSchema = z.object({
+  summaries: z.array(z.string())
+});
 
 export type IssueSummaries = z.infer<typeof IssueSummariesSchema>;
