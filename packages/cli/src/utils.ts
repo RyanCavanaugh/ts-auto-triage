@@ -160,6 +160,29 @@ export function createCLIOptions(): CLIOptions {
         usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
       };
     },
+    generateStructuredCompletion: async (_messages: any[], _schema: any, _options: any) => {
+      // For demo purposes, return a placeholder structured response
+      logger.warn('AI integration not fully configured - returning placeholder structured response');
+      
+      // Try to create a basic response that matches the schema structure
+      if (_schema && typeof _schema === 'object' && 'properties' in _schema) {
+        const response: any = {};
+        for (const [key, value] of Object.entries(_schema.properties)) {
+          if (value && typeof value === 'object' && 'type' in value) {
+            if (value.type === 'array') {
+              response[key] = [];
+            } else if (value.type === 'string') {
+              response[key] = 'placeholder text';
+            } else if (value.type === 'object') {
+              response[key] = {};
+            }
+          }
+        }
+        return response;
+      }
+      
+      return { placeholder: 'structured response' };
+    },
     generateEmbedding: async (_text: string) => {
       // Return a placeholder embedding
       logger.warn('AI integration not fully configured - returning placeholder embedding');

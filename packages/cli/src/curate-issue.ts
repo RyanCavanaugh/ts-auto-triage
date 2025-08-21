@@ -3,6 +3,14 @@
 import { createCLIOptions, parseIssueRef, handleError } from './utils.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { z } from 'zod';
+import { actionSchema } from './actions.js';
+
+// Schema for AI-generated curation actions - wrapping array in object for Azure OpenAI compatibility
+const curationResponseSchema = z.object({
+  actions: z.array(actionSchema),
+  reasoning: z.string().optional()
+});
 
 interface ActionItem {
   kind: 'add_label' | 'remove_label' | 'close_issue' | 'reopen_issue' | 'add_comment' | 'assign_user' | 'set_milestone';
@@ -61,13 +69,16 @@ async function main() {
 Repository Policy:
 ${policyContent}
 
-Respond with a JSON array of action objects. Each action should have a "kind" field and any relevant parameters.
+Respond with structured JSON containing an array of action objects and optional reasoning. Each action should have a "kind" field and any relevant parameters.
 
-Example response:
-[
-  {"kind": "add_label", "label": "bug"},
-  {"kind": "add_comment", "comment": "Thanks for the report. Could you provide a minimal reproduction case?"}
-]`
+Available actions:
+- add_label: Add a label to the issue
+- remove_label: Remove a label from the issue  
+- close_issue: Close the issue (with optional reason: "completed" or "not_planned")
+- reopen_issue: Reopen a closed issue
+- add_comment: Add a comment to the issue
+- assign_user: Assign a user to the issue
+- set_milestone: Set a milestone for the issue`
       },
       {
         role: 'user' as const,
@@ -77,13 +88,31 @@ ${issueContent}`
       }
     ];
 
-    const response = await ai.generateChatCompletion(messages, {
-      temperature: 0.2,
-      maxTokens: 1500
-    });
+    let aiActions: ActionItem[] = [];
+    let aiReasoning = '';
 
-    // For demo purposes, create some sample actions
-    const actions: ActionItem[] = [
+    try {
+      // Use structured completion for reliable JSON output
+      const result = await ai.generateStructuredCompletion(messages, curationResponseSchema, {
+        temperature: 0.2,
+        maxTokens: 1500
+      });
+
+      aiActions = result.actions || [];
+      aiReasoning = result.reasoning || '';
+      logger.info(`AI suggested ${aiActions.length} curation actions`);
+    } catch (error) {
+      logger.warn('AI-powered curation failed, using fallback actions:', error);
+      
+      // Fallback to basic actions
+      aiActions = [
+        { kind: 'add_label', label: 'needs-triage' },
+        { kind: 'add_comment', comment: 'Thanks for the report. This issue needs further review and triage.' }
+      ];
+    }
+
+    // Use AI-generated actions or fallback
+    const actions: ActionItem[] = aiActions.length > 0 ? aiActions : [
       { kind: 'add_label', label: 'performance' },
       { kind: 'add_comment', comment: 'Thanks for reporting this performance issue. Could you provide more details about your project setup?' }
     ];
@@ -99,7 +128,8 @@ ${issueContent}`
       },
       actions: actions,
       timestamp: new Date().toISOString(),
-      ai_analysis: response.content
+      ai_analysis: aiReasoning || 'AI-powered analysis completed',
+      ai_actions: aiActions
     };
 
     await fs.writeFile(actionFile, JSON.stringify(actionData, null, 2));
@@ -118,7 +148,7 @@ ${actions.map((action, i) => `${i + 1}. **${action.kind}**${action.label ? ` - $
 
 ## AI Analysis
 
-${response.content}
+${aiReasoning || 'AI-powered curation analysis completed'}
 
 ---
 *To execute these actions, review the action file and run: \`exec-action ${issueRef.owner}/${issueRef.repo}#${issueRef.number}\`*
