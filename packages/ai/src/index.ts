@@ -351,8 +351,111 @@ export function createAIClient(options: AIOptions) {
     return similarities;
   }
 
+  async function generateStructuredCompletion(
+    messages: ChatMessage[],
+    schema: object,
+    options: {
+      temperature?: number;
+      maxTokens?: number;
+      useCache?: boolean;
+    } = {}
+  ): Promise<any> {
+    const { temperature = 0.1, maxTokens = 2000, useCache = true } = options;
+
+    // Create cache key from messages, schema, and parameters
+    const cacheKey = `structured:${JSON.stringify({ messages, schema, temperature, maxTokens })}`;
+
+    if (useCache) {
+      const cached = await cache.get<any>(cacheKey);
+      if (cached) {
+        logger.debug('Using cached structured completion');
+        return cached;
+      }
+    }
+
+    if (!azureClient || !config.deployments.azure) {
+      throw new Error('Azure OpenAI not configured');
+    }
+
+    // Handle array schemas by wrapping them in an object
+    let isArrayResponse = false;
+    let schemaDescription = '';
+    
+    if (typeof schema === 'object' && schema !== null && 'type' in schema && schema.type === 'array') {
+      isArrayResponse = true;
+      schemaDescription = `Respond with a JSON object with an "items" property containing an array matching this schema: ${JSON.stringify(schema)}`;
+    } else {
+      schemaDescription = `Respond with JSON matching this schema: ${JSON.stringify(schema)}`;
+    }
+
+    // Add schema instructions to the system message
+    const systemMessage = messages.find(m => m.role === 'system');
+    const enhancedMessages = messages.map(msg => {
+      if (msg.role === 'system') {
+        return {
+          ...msg,
+          content: `${msg.content}\n\nIMPORTANT: ${schemaDescription} Respond with valid JSON only, no additional text.`
+        };
+      }
+      return msg;
+    });
+
+    // If no system message, add one
+    if (!systemMessage) {
+      enhancedMessages.unshift({
+        role: 'system',
+        content: `${schemaDescription} Respond with valid JSON only, no additional text.`
+      });
+    }
+
+    const result = await retry(async () => {
+      logger.debug('Making structured completion request to gpt-4o');
+      
+      const response = await azureClient!.getChatCompletions(
+        config.deployments.azure!.deploymentName,
+        enhancedMessages.map(msg => ({
+          role: msg.role,
+          content: capText(msg.content, 8000)
+        })),
+        {
+          temperature,
+          maxTokens,
+          responseFormat: {
+            type: 'json_object'
+          }
+        }
+      );
+
+      const choice = response.choices[0];
+      if (!choice || !choice.message?.content) {
+        throw new Error('No completion generated');
+      }
+
+      let parsedResult;
+      try {
+        parsedResult = JSON.parse(choice.message.content);
+      } catch (error) {
+        throw new Error(`Failed to parse JSON response: ${error}`);
+      }
+
+      // If we're expecting an array and got a wrapped object, unwrap it
+      if (isArrayResponse && parsedResult.items && Array.isArray(parsedResult.items)) {
+        parsedResult = parsedResult.items;
+      }
+
+      return parsedResult;
+    }, 3, 2000);
+
+    if (useCache) {
+      await cache.set(cacheKey, result);
+    }
+
+    return result;
+  }
+
   return {
     generateChatCompletion,
+    generateStructuredCompletion,
     generateEmbedding,
     generateBatchEmbeddings,
     cosineSimilarity,
