@@ -149,3 +149,6 @@ export function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
   // Fallback for unsupported types
   return { type: 'string' };
 }
+
+// Re-export file updater
+export { createFileUpdater, type FileUpdater, type FileUpdaterOptions } from './file-updater.js';

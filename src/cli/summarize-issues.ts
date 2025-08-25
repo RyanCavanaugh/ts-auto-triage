@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile, readdir } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
 import { join, basename } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { createConsoleLogger, ensureDirectoryExists, zodToJsonSchema } from '../lib/utils.js';
+import { createConsoleLogger, zodToJsonSchema, createFileUpdater } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, EmbeddingsDataSchema, SummariesDataSchema, IssueSummariesSchema, type GitHubIssue, type Config, type IssueSummaries } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, type GitHubIssue, type Config, type IssueSummaries, IssueSummariesSchema } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -37,26 +37,16 @@ async function main() {
     // Create AI wrapper
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
 
-    // Read existing summaries and embeddings
-    const summariesPath = '.data/summaries.json';
-    const embeddingsPath = '.data/embeddings.json';
+    // Create file updaters with auto-flush every 5 writes for better performance
+    const summariesUpdater = createFileUpdater<string[]>('.data/summaries.json', {
+      autoFlushInterval: 5,
+      logger,
+    });
     
-    let existingSummaries: Record<string, string[]> = {};
-    let existingEmbeddings: Record<string, string[]> = {};
-     
-    try {
-      const summariesContent = await readFile(summariesPath, 'utf-8');
-      existingSummaries = SummariesDataSchema.parse(JSON.parse(summariesContent));
-    } catch {
-      // File doesn't exist yet, start fresh
-    }
-    
-    try {
-      const embeddingsContent = await readFile(embeddingsPath, 'utf-8');
-      existingEmbeddings = EmbeddingsDataSchema.parse(JSON.parse(embeddingsContent));
-    } catch {
-      // File doesn't exist yet, start fresh
-    }
+    const embeddingsUpdater = createFileUpdater<string[]>('.data/embeddings.json', {
+      autoFlushInterval: 5, 
+      logger,
+    });
 
     // Find all issue files for this repository
     const dataDir = `.data/${owner.toLowerCase()}/${repo.toLowerCase()}`;
@@ -80,9 +70,12 @@ async function main() {
       const issueKey = `${owner.toLowerCase()}/${repo.toLowerCase()}#${issueNumber}`;
 
       // Skip if already processed (both summaries and embeddings must be present)
+      const existingSummaries = summariesUpdater.get(issueKey);
+      const existingEmbeddings = embeddingsUpdater.get(issueKey);
+      
       if (
-        existingSummaries[issueKey] && Array.isArray(existingSummaries[issueKey]) && existingSummaries[issueKey].length > 0 &&
-        existingEmbeddings[issueKey] && Array.isArray(existingEmbeddings[issueKey]) && existingEmbeddings[issueKey].length > 0
+        existingSummaries && Array.isArray(existingSummaries) && existingSummaries.length > 0 &&
+        existingEmbeddings && Array.isArray(existingEmbeddings) && existingEmbeddings.length > 0
       ) {
         skippedCount++;
         continue;
@@ -96,15 +89,15 @@ async function main() {
         const issue = GitHubIssueSchema.parse(JSON.parse(issueContent));
 
         // Create summaries (array) if not exists
-        if (!existingSummaries[issueKey] || existingSummaries[issueKey].length === 0) {
+        if (!existingSummaries || existingSummaries.length === 0) {
           const summaries = await createIssueSummaries(ai, issue, config, 3);
-          existingSummaries[issueKey] = summaries;
+          summariesUpdater.set(issueKey, summaries);
           logger.debug(`Created summaries for ${issueKey}`);
         }
 
         // Create embeddings array (one per summary) if not exists
-        if (!existingEmbeddings[issueKey] || existingEmbeddings[issueKey].length === 0) {
-          const summariesForIssue = existingSummaries[issueKey]!;
+        if (!existingEmbeddings || existingEmbeddings.length === 0) {
+          const summariesForIssue = summariesUpdater.get(issueKey) ?? [];
           const embeddingBase64Array: string[] = [];
           for (const s of summariesForIssue) {
             // Cap the string length for embedding input to avoid API errors
@@ -113,17 +106,15 @@ async function main() {
             const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
             embeddingBase64Array.push(embeddingBase64);
           }
-          existingEmbeddings[issueKey] = embeddingBase64Array;
+          embeddingsUpdater.set(issueKey, embeddingBase64Array);
           logger.debug(`Created embeddings for ${issueKey}`);
         }
 
         processedCount++;
 
-        // Save progress every 10 issues
+        // Log progress without forced flushes (auto-flush handles this)
         if (processedCount % 10 === 0) {
-          await saveData(summariesPath, existingSummaries);
-          await saveData(embeddingsPath, existingEmbeddings);
-          logger.info(`Processed ${processedCount} issues, saved progress`);
+          logger.info(`Processed ${processedCount} issues (pending: summaries=${summariesUpdater.getPendingWrites()}, embeddings=${embeddingsUpdater.getPendingWrites()})`);
         }
 
       } catch (error) {
@@ -132,9 +123,9 @@ async function main() {
       }
     }
 
-    // Save final results
-    await saveData(summariesPath, existingSummaries);
-    await saveData(embeddingsPath, existingEmbeddings);
+    // Ensure all changes are saved
+    await summariesUpdater.dispose();
+    await embeddingsUpdater.dispose();
 
     logger.info(`Summarization complete! Processed: ${processedCount}, Skipped: ${skippedCount}, Total: ${issueFiles.length}`);
 
@@ -175,11 +166,6 @@ async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: C
 function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength - 3) + '...';
-}
-
-async function saveData(filePath: string, data: Record<string, unknown>): Promise<void> {
-  ensureDirectoryExists(filePath);
-  await writeFile(filePath, JSON.stringify(data, null, 2));
 }
 
 main().catch(console.error);
