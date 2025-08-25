@@ -9,6 +9,7 @@
     "fetch-issues": "dist/cli/fetch-issues.js",
     "fetch-issue": "dist/cli/fetch-issue.js",
     "summarize-issues": "dist/cli/summarize-issues.js",
+    "compute-embeddings": "dist/cli/compute-embeddings.js",
     "curate-issue": "dist/cli/curate-issue.js",
     "exec-action": "dist/cli/exec-action.js",
     "first-response": "dist/cli/first-response.js",

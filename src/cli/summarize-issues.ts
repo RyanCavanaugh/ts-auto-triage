@@ -37,14 +37,9 @@ async function main() {
     // Create AI wrapper
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
 
-    // Create file updaters with auto-flush every 5 writes for better performance
+    // Create file updater with auto-flush every 5 writes for better performance
     const summariesUpdater = createFileUpdater<string[]>('.data/summaries.json', {
       autoFlushInterval: 5,
-      logger,
-    });
-    
-    const embeddingsUpdater = createFileUpdater<string[]>('.data/embeddings.json', {
-      autoFlushInterval: 5, 
       logger,
     });
 
@@ -69,14 +64,10 @@ async function main() {
       const issueNumber = basename(filePath, '.json');
       const issueKey = `${owner.toLowerCase()}/${repo.toLowerCase()}#${issueNumber}`;
 
-      // Skip if already processed (both summaries and embeddings must be present)
+      // Skip if already processed (summary must be present)
       const existingSummaries = summariesUpdater.get(issueKey);
-      const existingEmbeddings = embeddingsUpdater.get(issueKey);
       
-      if (
-        existingSummaries && Array.isArray(existingSummaries) && existingSummaries.length > 0 &&
-        existingEmbeddings && Array.isArray(existingEmbeddings) && existingEmbeddings.length > 0
-      ) {
+      if (existingSummaries && Array.isArray(existingSummaries) && existingSummaries.length > 0) {
         skippedCount++;
         continue;
       }
@@ -95,27 +86,11 @@ async function main() {
           logger.debug(`Created summaries for ${issueKey}`);
         }
 
-        // Create embeddings array (one per summary) if not exists
-        if (!existingEmbeddings || existingEmbeddings.length === 0) {
-          const summariesForIssue = summariesUpdater.get(issueKey) ?? [];
-          const embeddingBase64Array: string[] = [];
-          for (let i = 0; i < summariesForIssue.length; i++) {
-            const s = summariesForIssue[i]!;
-            // Cap the string length for embedding input to avoid API errors
-            const cappedSummary = truncateText(s, config.ai.maxEmbeddingInputLength);
-            const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
-            const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
-            embeddingBase64Array.push(embeddingBase64);
-          }
-          embeddingsUpdater.set(issueKey, embeddingBase64Array);
-          logger.debug(`Created embeddings for ${issueKey}`);
-        }
-
         processedCount++;
 
         // Log progress without forced flushes (auto-flush handles this)
         if (processedCount % 10 === 0) {
-          logger.info(`Processed ${processedCount} issues (pending: summaries=${summariesUpdater.getPendingWrites()}, embeddings=${embeddingsUpdater.getPendingWrites()})`);
+          logger.info(`Processed ${processedCount} issues (pending: summaries=${summariesUpdater.getPendingWrites()})`);
         }
 
       } catch (error) {
@@ -126,7 +101,6 @@ async function main() {
 
     // Ensure all changes are saved
     await summariesUpdater.dispose();
-    await embeddingsUpdater.dispose();
 
     logger.info(`Summarization complete! Processed: ${processedCount}, Skipped: ${skippedCount}, Total: ${issueFiles.length}`);
 
