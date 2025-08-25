@@ -34,6 +34,9 @@ export interface FileUpdater<T> {
   
   /** Dispose and flush any remaining changes */
   dispose(): Promise<void>;
+  
+  /** Clear memory cache (useful for large datasets) */
+  clearMemoryCache(): void;
 }
 
 /**
@@ -99,11 +102,13 @@ export function createFileUpdater<T>(
         
         // Auto-flush if interval is configured and reached
         if (autoFlushInterval > 0 && changeCount >= autoFlushInterval) {
-          // Use setImmediate to avoid blocking the current operation
-          setImmediate(() => {
-            this.flush().catch((error) => {
+          // Use Promise.resolve to avoid setImmediate which can hold references
+          Promise.resolve().then(async () => {
+            try {
+              await this.flush();
+            } catch (error) {
               logger?.error(`Auto-flush failed: ${error}`);
-            });
+            }
           });
         }
       }
@@ -159,6 +164,25 @@ export function createFileUpdater<T>(
     async dispose(): Promise<void> {
       if (this.hasChanges()) {
         await this.flush();
+      }
+    },
+
+    clearMemoryCache(): void {
+      // For memory optimization in large datasets, only keep minimal state
+      if (!this.hasChanges()) {
+        // Keep the structure but clear large data
+        const keys = Object.keys(originalData);
+        if (keys.length > 100) { // Only optimize for large datasets
+          originalData = {};
+          currentData = {};
+          changeCount = 0;
+          isLoaded = false;
+          logger?.debug(`Cleared memory cache for ${filePath} (was ${keys.length} entries)`);
+        } else {
+          logger?.debug(`Skipped memory cache clear for ${filePath}: dataset too small (${keys.length} entries)`);
+        }
+      } else {
+        logger?.warn(`Cannot clear memory cache for ${filePath}: unsaved changes exist`);
       }
     },
   };

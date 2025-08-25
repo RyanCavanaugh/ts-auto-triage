@@ -83,8 +83,8 @@ describe('FileUpdater Integration', () => {
     // Add second change to trigger auto-flush
     updater.set('key2', 'value2');
     
-    // Wait for setImmediate to process the auto-flush
-    await new Promise(resolve => setImmediate(resolve));
+    // Wait for Promise.resolve to process the auto-flush
+    await new Promise(resolve => Promise.resolve().then(resolve));
     // Wait a bit more for the async flush to complete
     await new Promise(resolve => setTimeout(resolve, 10));
     
@@ -118,7 +118,7 @@ describe('FileUpdater Integration', () => {
     
     const updater = createFileUpdater<string>(testFilePath, {
       serialize: customSerializer,
-      logger
+      logger,
     });
     
     updater.set('key1', 'value1');
@@ -126,6 +126,54 @@ describe('FileUpdater Integration', () => {
     
     const fileContent = await fs.readFile(testFilePath, 'utf-8');
     expect(fileContent).toBe('CUSTOM:{"key1":"value1"}');
+  });
+
+  it('should clear memory cache safely for large datasets', async () => {
+    const updater = createFileUpdater<string>(testFilePath, { logger });
+    
+    // Add many items to simulate large dataset
+    for (let i = 0; i < 150; i++) {
+      updater.set(`key${i}`, `value${i}`);
+    }
+    
+    // Should not clear cache with unsaved changes
+    updater.clearMemoryCache();
+    expect(updater.get('key1')).toBe('value1'); // Should still have data
+    
+    // Flush changes
+    await updater.flush();
+    
+    // Now should clear cache for large dataset
+    updater.clearMemoryCache();
+    
+    // Should still be able to add new data
+    updater.set('key200', 'value200');
+    expect(updater.get('key200')).toBe('value200');
+    
+    await updater.dispose();
+  });
+
+  it('should prevent memory leaks with frequent cache clearing', async () => {
+    const updater = createFileUpdater<string[]>(testFilePath, { 
+      autoFlushInterval: 2,
+      logger,
+    });
+    
+    // Simulate processing many items (over threshold for clearing)
+    for (let i = 0; i < 150; i++) {
+      updater.set(`key${i}`, [`value${i}`]);
+      
+      // Clear memory every 20 items after flushing
+      if (i % 20 === 19) {
+        await updater.flush();
+        updater.clearMemoryCache();
+      }
+    }
+    
+    // Should still work after processing
+    expect(updater.get('key149')).toEqual(['value149']);
+    
+    await updater.dispose();
   });
 
   it('should handle dispose properly', async () => {

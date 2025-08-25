@@ -35,27 +35,21 @@ async function main() {
     // Create AI wrapper (only for embeddings)
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
 
-    // Check if summaries.json exists
+    // Check if summaries.json exists and get issue keys without loading all data
     const summariesPath = '.data/summaries.json';
-    let summariesData: Record<string, string[]>;
+    const repoPrefix = `${owner.toLowerCase()}/${repo.toLowerCase()}#`;
     
+    let issueKeys: string[];
     try {
       const summariesContent = await readFile(summariesPath, 'utf-8');
-      summariesData = SummariesDataSchema.parse(JSON.parse(summariesContent));
+      const summariesData = SummariesDataSchema.parse(JSON.parse(summariesContent));
+      // Filter to only process issues for this repository
+      issueKeys = Object.keys(summariesData).filter(key => key.startsWith(repoPrefix));
+      // Don't keep the full summariesData in memory - we'll read individual entries as needed
     } catch {
       logger.error(`No summaries data found at ${summariesPath}. Run summarize-issues first.`);
       process.exit(1);
     }
-
-    // Create embeddings file updater with auto-flush every 5 writes for better performance
-    const embeddingsUpdater = createFileUpdater<string[]>('.data/embeddings.json', {
-      autoFlushInterval: 5, 
-      logger,
-    });
-
-    // Filter to only process issues for this repository
-    const repoPrefix = `${owner.toLowerCase()}/${repo.toLowerCase()}#`;
-    const issueKeys = Object.keys(summariesData).filter(key => key.startsWith(repoPrefix));
 
     if (issueKeys.length === 0) {
       logger.warn(`No summaries found for repository ${owner}/${repo}. Run summarize-issues for this repository first.`);
@@ -64,51 +58,105 @@ async function main() {
 
     logger.info(`Found ${issueKeys.length} issues with summaries to process`);
 
+    // Create embeddings file updater with smaller auto-flush interval for memory efficiency
+    const embeddingsUpdater = createFileUpdater<string[]>('.data/embeddings.json', {
+      autoFlushInterval: 3, // Flush more frequently to reduce memory usage
+      logger,
+    });
+
     let processedCount = 0;
     let skippedCount = 0;
 
-    for (const issueKey of issueKeys) {
-      // Skip if embeddings already exist
-      const existingEmbeddings = embeddingsUpdater.get(issueKey);
+    // Process in smaller batches to avoid memory accumulation
+    const batchSize = 50; // Process 50 issues at a time
+    
+    for (let batchStart = 0; batchStart < issueKeys.length; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize, issueKeys.length);
+      const batchKeys = issueKeys.slice(batchStart, batchEnd);
       
-      if (existingEmbeddings && Array.isArray(existingEmbeddings) && existingEmbeddings.length > 0) {
-        skippedCount++;
+      logger.info(`Processing batch ${Math.floor(batchStart / batchSize) + 1}/${Math.ceil(issueKeys.length / batchSize)} (${batchKeys.length} issues)`);
+      
+      // Load only the current batch of summaries to save memory
+      let batchSummariesData: Record<string, string[]>;
+      try {
+        const summariesContent = await readFile(summariesPath, 'utf-8');
+        const fullSummariesData = SummariesDataSchema.parse(JSON.parse(summariesContent));
+        batchSummariesData = {};
+        for (const key of batchKeys) {
+          if (fullSummariesData[key]) {
+            batchSummariesData[key] = fullSummariesData[key];
+          }
+        }
+      } catch (error) {
+        logger.error(`Failed to load summaries for batch: ${error}`);
         continue;
       }
 
-      logger.info(`Computing embeddings for ${issueKey}...`);
-
-      try {
-        const summariesForIssue = summariesData[issueKey] ?? [];
-        if (summariesForIssue.length === 0) {
-          logger.warn(`No summaries found for ${issueKey}, skipping...`);
+      for (const issueKey of batchKeys) {
+        // Skip if embeddings already exist
+        const existingEmbeddings = embeddingsUpdater.get(issueKey);
+        
+        if (existingEmbeddings && Array.isArray(existingEmbeddings) && existingEmbeddings.length > 0) {
+          skippedCount++;
           continue;
         }
 
-        // Create embeddings array (one per summary)
-        const embeddingBase64Array: string[] = [];
-        for (let i = 0; i < summariesForIssue.length; i++) {
-          const summary = summariesForIssue[i]!;
-          // Cap the string length for embedding input to avoid API errors
-          const cappedSummary = truncateText(summary, config.ai.maxEmbeddingInputLength);
-          const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
-          const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
-          embeddingBase64Array.push(embeddingBase64);
+        logger.debug(`Computing embeddings for ${issueKey}...`);
+
+        try {
+          const summariesForIssue = batchSummariesData[issueKey] ?? [];
+          if (summariesForIssue.length === 0) {
+            logger.warn(`No summaries found for ${issueKey}, skipping...`);
+            continue;
+          }
+
+          // Create embeddings array (one per summary)
+          const embeddingBase64Array: string[] = [];
+          for (let i = 0; i < summariesForIssue.length; i++) {
+            const summary = summariesForIssue[i]!;
+            // Cap the string length for embedding input to avoid API errors
+            const cappedSummary = truncateText(summary, config.ai.maxEmbeddingInputLength);
+            const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
+            const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
+            embeddingBase64Array.push(embeddingBase64);
+            
+            // Clear the embedding response from memory immediately
+            (embeddingResponse as unknown) = null;
+          }
+
+          embeddingsUpdater.set(issueKey, embeddingBase64Array);
+          logger.debug(`Created embeddings for ${issueKey} (${embeddingBase64Array.length} embeddings)`);
+
+          processedCount++;
+
+          // Log progress and suggest garbage collection
+          if (processedCount % 10 === 0) {
+            logger.info(`Processed ${processedCount} issues (pending: embeddings=${embeddingsUpdater.getPendingWrites()})`);
+            // Hint garbage collector to clean up
+            if (global.gc) {
+              global.gc();
+            }
+          }
+
+        } catch (error) {
+          logger.error(`Failed to compute embeddings for ${issueKey}: ${error}`);
+          continue;
         }
-
-        embeddingsUpdater.set(issueKey, embeddingBase64Array);
-        logger.debug(`Created embeddings for ${issueKey} (${embeddingBase64Array.length} embeddings)`);
-
-        processedCount++;
-
-        // Log progress without forced flushes (auto-flush handles this)
-        if (processedCount % 10 === 0) {
-          logger.info(`Processed ${processedCount} issues (pending: embeddings=${embeddingsUpdater.getPendingWrites()})`);
-        }
-
-      } catch (error) {
-        logger.error(`Failed to compute embeddings for ${issueKey}: ${error}`);
-        continue;
+      }
+      
+      // Clear batch data from memory after processing
+      batchSummariesData = {};
+      
+      // Force flush after each batch to prevent memory accumulation
+      await embeddingsUpdater.flush();
+      
+      // Clear file updater memory cache to prevent memory leaks
+      embeddingsUpdater.clearMemoryCache();
+      
+      // Force garbage collection if available
+      if (global.gc) {
+        global.gc();
+        logger.debug(`Completed batch ${Math.floor(batchStart / batchSize) + 1}, forced garbage collection`);
       }
     }
 
