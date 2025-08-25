@@ -62,22 +62,33 @@ export function createFileUpdater<T>(
   async function loadExistingData(): Promise<void> {
     if (isLoaded) return;
     
+    // Capture the current change count before any async operations
+    // to avoid race conditions with concurrent flushes
+    const currentChangeCount = changeCount;
+    
     try {
       const content = await readFile(filePath, 'utf-8');
       const fileData = JSON.parse(content) as Record<string, T>;
       originalData = fileData;
-      // Only reset currentData if we don't have any changes yet
-      if (changeCount === 0) {
+      // Always merge existing file data with current changes
+      if (currentChangeCount === 0) {
         currentData = { ...fileData };
+      } else {
+        // Merge file data with current changes, prioritizing current changes
+        const beforeMerge = Object.keys(currentData).length;
+        currentData = { ...fileData, ...currentData };
+        const afterMerge = Object.keys(currentData).length;
+        logger?.debug(`Merged ${Object.keys(fileData).length} existing + ${beforeMerge} current = ${afterMerge} total entries`);
       }
       logger?.debug(`Loaded existing data from ${filePath} (${Object.keys(originalData).length} entries)`);
     } catch {
       // File doesn't exist or is invalid, start with empty data
       originalData = {};
       // Only reset currentData if we don't have any changes yet
-      if (changeCount === 0) {
+      if (currentChangeCount === 0) {
         currentData = {};
       }
+      // If we have changes but no file exists, keep currentData as-is
       logger?.debug(`Starting with empty data for ${filePath}`);
     }
     
@@ -86,6 +97,7 @@ export function createFileUpdater<T>(
 
   async function ensureLoaded(): Promise<void> {
     if (!isLoaded) {
+      logger?.debug(`ensureLoaded: calling loadExistingData because isLoaded=${isLoaded}`);
       await loadExistingData();
     }
   }
@@ -103,9 +115,14 @@ export function createFileUpdater<T>(
         // Auto-flush if interval is configured and reached
         if (autoFlushInterval > 0 && changeCount >= autoFlushInterval) {
           // Use Promise.resolve to avoid setImmediate which can hold references
+          // Ensure we don't have race conditions by checking state
           Promise.resolve().then(async () => {
             try {
-              await this.flush();
+              // Only auto-flush if we still have the expected change count
+              // This prevents race conditions with manual flushes
+              if (changeCount >= autoFlushInterval) {
+                await this.flush();
+              }
             } catch (error) {
               logger?.error(`Auto-flush failed: ${error}`);
             }
@@ -115,6 +132,8 @@ export function createFileUpdater<T>(
     },
 
     get(key: string): T | undefined {
+      // Trigger lazy loading if needed (but we can't await in a sync method)
+      // The loadExistingData will be called in the next async operation (flush)
       return currentData[key];
     },
 
@@ -124,10 +143,15 @@ export function createFileUpdater<T>(
 
     hasChanges(): boolean {
       if (!isLoaded && changeCount > 0) {
+        logger?.debug(`hasChanges: not loaded but ${changeCount} changes, returning true`);
         return true;
       }
       
-      return !isEqual(originalData, currentData);
+      const result = !isEqual(originalData, currentData);
+      if (result) {
+        logger?.debug(`hasChanges: ${Object.keys(originalData).length} original vs ${Object.keys(currentData).length} current, returning ${result}`);
+      }
+      return result;
     },
 
     getPendingWrites(): number {
