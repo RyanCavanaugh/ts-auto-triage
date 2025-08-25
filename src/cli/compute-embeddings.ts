@@ -119,9 +119,6 @@ async function main() {
             const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
             const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
             embeddingBase64Array.push(embeddingBase64);
-            
-            // Clear the embedding response from memory immediately
-            (embeddingResponse as unknown) = null;
           }
 
           embeddingsUpdater.set(issueKey, embeddingBase64Array);
