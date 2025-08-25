@@ -8,7 +8,7 @@ import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueR
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { createLSPHarness, type LSPHarness } from '../lib/lsp-harness.js';
 import { createTwoslashParser, type TwoslashParser } from '../lib/twoslash.js';
-import { ConfigSchema, GitHubIssueSchema, ReproCodeSchema, ReproAnalysisSchema, FinalAnalysisSchema, type GitHubIssue, type Config, type ReproCode, type ReproAnalysis, type FinalAnalysis } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, ReproCodeSchema, ReproAnalysisSchema, FinalAnalysisSchema, type GitHubIssue, type Config, type ReproCode, type ReproAnalysis, type FinalAnalysis, type IssueRef } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 interface ReproAttempt {
@@ -93,6 +93,7 @@ async function main() {
         lspHarness,
         twoslashParser,
         issue,
+        issueRef,
         workspaceDir,
         attemptNum,
         result.attempts,
@@ -110,7 +111,7 @@ async function main() {
     }
 
     // Generate final summary and recommendation
-    const finalAnalysis = await generateFinalAnalysis(ai, issue, result.attempts, logger);
+    const finalAnalysis = await generateFinalAnalysis(ai, issue, issueRef, result.attempts, logger);
     result.summary = finalAnalysis.summary;
     result.recommendation = finalAnalysis.recommendation;
 
@@ -180,6 +181,7 @@ async function runReproAttempt(
   lspHarness: LSPHarness,
   twoslashParser: TwoslashParser,
   issue: GitHubIssue,
+  issueRef: IssueRef,
   workspaceDir: string,
   attemptNum: number,
   previousAttempts: ReproAttempt[],
@@ -196,7 +198,7 @@ async function runReproAttempt(
 
   try {
     // Get AI to generate reproduction approach and files
-    const reproCode = await generateReproductionCode(ai, issue, previousAttempts, config);
+    const reproCode = await generateReproductionCode(ai, issue, issueRef, previousAttempts, config);
     attempt.approach = reproCode.approach;
     attempt.files = reproCode.files;
 
@@ -240,7 +242,7 @@ async function runReproAttempt(
     }
 
     // Analyze results with AI
-    const analysis = await analyzeReproResults(ai, issue, attempt, logger);
+    const analysis = await analyzeReproResults(ai, issue, issueRef, attempt, logger);
     attempt.analysis = analysis.analysis;
     attempt.success = analysis.success;
 
@@ -252,7 +254,7 @@ async function runReproAttempt(
   return attempt;
 }
 
-async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, previousAttempts: ReproAttempt[], config: Config): Promise<{ approach: string; files: Array<{ filename: string; content: string }> }> {
+async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issueRef: IssueRef, previousAttempts: ReproAttempt[], config: Config): Promise<{ approach: string; files: Array<{ filename: string; content: string }> }> {
   const body = issue.body ? issue.body.slice(0, config.github.maxIssueBodyLength) : '';
   const recentComments = issue.comments
     .slice(-3)
@@ -269,12 +271,16 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, previ
   ];
  
   const jsonSchema = zodToJsonSchema(ReproCodeSchema);
-  const response = await ai.structuredCompletion<ReproCode>(messages, jsonSchema, { maxTokens: 2000 });
+  const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
+  const response = await ai.structuredCompletion<ReproCode>(messages, jsonSchema, { 
+    maxTokens: 2000,
+    context: `Generate reproduction code for ${issueKey}`,
+  });
   
   return response;
 }
  
- async function analyzeReproResults(ai: AIWrapper, issue: GitHubIssue, attempt: ReproAttempt, logger: Logger): Promise<{ analysis: string; success: boolean }> {
+ async function analyzeReproResults(ai: AIWrapper, issue: GitHubIssue, issueRef: IssueRef, attempt: ReproAttempt, logger: Logger): Promise<{ analysis: string; success: boolean }> {
    const systemPrompt = await loadPrompt('repro-analyze-system');
    const userPrompt = await loadPrompt('repro-analyze-user', {
      issueTitle: issue.title,
@@ -289,12 +295,16 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, previ
    ];
  
    const jsonSchema = zodToJsonSchema(ReproAnalysisSchema);
-   const response = await ai.structuredCompletion<ReproAnalysis>(messages, jsonSchema, { maxTokens: 500 });
+   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
+   const response = await ai.structuredCompletion<ReproAnalysis>(messages, jsonSchema, { 
+     maxTokens: 500,
+     context: `Analyze reproduction attempt for ${issueKey}`,
+   });
    
    return response;
  }
  
- async function generateFinalAnalysis(ai: AIWrapper, issue: GitHubIssue, attempts: ReproAttempt[], logger: Logger): Promise<{ summary: string; recommendation: string }> {
+ async function generateFinalAnalysis(ai: AIWrapper, issue: GitHubIssue, issueRef: IssueRef, attempts: ReproAttempt[], logger: Logger): Promise<{ summary: string; recommendation: string }> {
    const attemptsText = attempts.map(a => 
      `Attempt ${a.attempt}: ${a.approach}\n${a.success ? 'SUCCESS' : 'FAILED'} - ${a.analysis}`
    ).join('\n\n');
@@ -308,7 +318,11 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, previ
    ];
  
    const jsonSchema = zodToJsonSchema(FinalAnalysisSchema);
-   const response = await ai.structuredCompletion<FinalAnalysis>(messages, jsonSchema, { maxTokens: 800 });
+   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
+   const response = await ai.structuredCompletion<FinalAnalysis>(messages, jsonSchema, { 
+     maxTokens: 800,
+     context: `Generate final analysis for ${issueKey}`,
+   });
    
    return response;
  }

@@ -22,7 +22,7 @@ async function main() {
 
     // Embedding test (lightweight)
     try {
-      const embeddingResp = await ai.getEmbedding('validate-connection');
+      const embeddingResp = await ai.getEmbedding('validate-connection', undefined, 'AI connection validation test');
       logger.info(`Embedding validation OK: embedding length ${embeddingResp.embedding.length}. Tokens used: ${embeddingResp.usage?.total_tokens ?? 0}`);
     } catch (err) {
       logger.error(`Embedding test failed: ${err}`);
@@ -43,7 +43,10 @@ async function main() {
         },
       ];
 
-      const chatResp = await ai.chatCompletion(messages, { maxTokens: 20 });
+      const chatResp = await ai.chatCompletion(messages, { 
+        maxTokens: 20,
+        context: 'AI chat completion validation test',
+      });
       const contentPreview = (chatResp.content || '').replace(/\s+/g, ' ').trim().slice(0, 200);
       logger.info(`Chat test succeeded. Response preview: ${contentPreview}`);
       logger.info(`Chat tokens used: ${chatResp.usage?.total_tokens ?? 0}`);

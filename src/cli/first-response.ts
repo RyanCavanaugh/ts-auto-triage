@@ -56,7 +56,7 @@ async function main() {
     let faqResponse: string | null = null;
     try {
       const faqContent = await readFile('FAQ.md', 'utf-8');
-      faqResponse = await checkFAQMatches(ai, issueBody, issue.title, faqContent);
+      faqResponse = await checkFAQMatches(ai, issueBody, issue.title, faqContent, issueRef);
     } catch {
       logger.debug('No FAQ.md file found, skipping FAQ check');
     }
@@ -115,7 +115,7 @@ ${JSON.stringify(actionFile, null, 2)}`;
   }
 }
 
-async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: string, faqContent: string): Promise<string | null> {
+async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: string, faqContent: string, issueRef: IssueRef): Promise<string | null> {
   const systemPrompt = await loadPrompt('first-response-system');
   const userPrompt = await loadPrompt('first-response-user', {
     issueTitle,
@@ -129,7 +129,11 @@ async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: str
   ];
 
   const jsonSchema = zodToJsonSchema(FAQResponseSchema);
-  const response = await ai.structuredCompletion<FAQResponse>(messages, jsonSchema, { maxTokens: 500 });
+  const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
+  const response = await ai.structuredCompletion<FAQResponse>(messages, jsonSchema, { 
+    maxTokens: 500,
+    context: `Check FAQ matches for ${issueKey}`,
+  });
   
   return response.has_match ? response.response ?? null : null;
 }
@@ -159,7 +163,8 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
   const cappedText = currentIssueText.length > config.ai.maxEmbeddingInputLength 
     ? currentIssueText.slice(0, config.ai.maxEmbeddingInputLength - 3) + '...'
     : currentIssueText;
-  const currentEmbedding = await ai.getEmbedding(cappedText);
+  const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
+  const currentEmbedding = await ai.getEmbedding(cappedText, undefined, `Get embedding for current issue ${issueKey}`);
   
   // Calculate similarities
   const similarities: Array<{ issueKey: string; similarity: number; summary: string }> = [];

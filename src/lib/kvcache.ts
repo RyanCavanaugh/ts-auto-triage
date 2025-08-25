@@ -8,16 +8,16 @@ interface CacheEntry<T> {
 }
 
 export interface KVCache {
-  memoize<T>(key: string, compute: () => Promise<T>): Promise<T>;
+  memoize<T>(key: string, description: string, compute: () => Promise<T>): Promise<T>;
   clear(): Promise<void>;
   size(): Promise<number>;
 }
 
 export function createKVCache(logger: Logger, enabled: boolean = true): KVCache {
   return {
-    async memoize<T>(key: string, compute: () => Promise<T>): Promise<T> {
+    async memoize<T>(key: string, description: string, compute: () => Promise<T>): Promise<T> {
       if (!enabled) {
-        logger.debug(`Cache disabled, computing fresh value for key: ${key}`);
+        logger.debug(`Cache disabled, computing fresh value for: ${description}`);
         return await compute();
       }
 
@@ -28,16 +28,16 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
         // Try to read from cache
         const cacheData = await fs.readFile(cachePath, 'utf-8');
         const entry: CacheEntry<T> = JSON.parse(cacheData);
-        logger.debug(`Cache hit for key: ${key}`);
+        logger.debug(`Cache hit: ${description}`);
         return entry.data;
       } catch (error) {
         // Cache miss, compute and store
-        logger.debug(`Cache miss for key: ${key}, computing...`);
+        logger.debug(`Cache miss: ${description}, computing...`);
         const result = await compute();
 
         // If the computed value is explicitly null, don't create a cache file.
         if (result === null) {
-          logger.debug(`Computed result is null for key: ${key}; not creating cache file`);
+          logger.debug(`Computed result is null for: ${description}; not creating cache file`);
           return result;
         }
         
@@ -48,9 +48,9 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
             timestamp: Date.now(),
           };
           await fs.writeFile(cachePath, JSON.stringify(entry, null, 2));
-          logger.debug(`Cached result for key: ${key}`);
+          logger.debug(`Cached result: ${description}`);
         } catch (writeError) {
-          logger.warn(`Failed to write cache for key ${key}: ${writeError}`);
+          logger.warn(`Failed to write cache for ${description}: ${writeError}`);
         }
         
         return result;

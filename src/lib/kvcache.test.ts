@@ -13,8 +13,8 @@ describe('KVCache', () => {
       return 'test-value';
     };
 
-    const result1 = await cache.memoize('test-key', compute);
-    const result2 = await cache.memoize('test-key', compute);
+    const result1 = await cache.memoize('test-key', 'Test operation 1', compute);
+    const result2 = await cache.memoize('test-key', 'Test operation 2', compute);
 
     expect(result1).toBe('test-value');
     expect(result2).toBe('test-value');

@@ -61,7 +61,7 @@ async function main() {
     const { labels, milestones } = await getRepositoryMetadata(issueRef);
 
     // Get AI recommendations
-    const recommendations = await getCurationRecommendations(ai, issue, policyContent, labels, milestones, config);
+    const recommendations = await getCurationRecommendations(ai, issue, issueRef, policyContent, labels, milestones, config);
 
     if (recommendations.length === 0) {
       logger.info('No curation actions recommended');
@@ -126,6 +126,7 @@ async function getRepositoryMetadata(issueRef: IssueRef): Promise<{ labels: stri
 async function getCurationRecommendations(
   ai: AIWrapper,
   issue: GitHubIssue,
+  issueRef: IssueRef,
   policyContent: string,
   availableLabels: string[],
   availableMilestones: string[],
@@ -143,7 +144,10 @@ async function getCurationRecommendations(
     { role: 'user' as const, content: await loadPrompt('curate-issue-user', { policyContent, issueNumber: String(issue.number), issueTitle: issue.title, issueState: issue.state, currentLabels: issue.labels.map((l) => l.name).join(', '), author: issue.user.login, authorAssociation: issue.author_association, body, recentComments }) },
    ];
 
-   const response = await ai.chatCompletion(messages, { maxTokens: 1000 });
+   const response = await ai.chatCompletion(messages, { 
+     maxTokens: 1000,
+     context: `Curate issue ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
+   });
    
    try {
      const actions = JSON.parse(response.content);

@@ -39,6 +39,7 @@ export interface AIWrapper {
     maxTokens?: number;
     temperature?: number;
     model?: string;
+    context?: string; // Optional context for cache logging
   }): Promise<ChatCompletionResponse>;
 
   structuredCompletion<T>(
@@ -48,10 +49,11 @@ export interface AIWrapper {
       maxTokens?: number;
       temperature?: number;
       model?: string;
+      context?: string; // Optional context for cache logging
     }
   ): Promise<T>;
 
-  getEmbedding(text: string, model?: string): Promise<EmbeddingResponse>;
+  getEmbedding(text: string, model?: string, context?: string): Promise<EmbeddingResponse>;
 }
 
 export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = true): AIWrapper {
@@ -85,8 +87,11 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       const model = options.model ?? config.deployments.chat;
       const cacheKey = cache ? JSON.stringify({ messages, model, options }) : null;
       
+      // Create human-readable description for cache logging
+      const description = options.context ?? `Chat completion with ${model}`;
+      
       if (cache && cacheKey) {
-        const cached = await cache.memoize(cacheKey, async () => null);
+        const cached = await cache.memoize(cacheKey, description, async () => null);
         if (cached) {
           logger.debug('Using cached chat completion');
           return cached as ChatCompletionResponse;
@@ -118,7 +123,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         };
 
         if (cache && cacheKey) {
-          await cache.memoize(cacheKey, async () => result);
+          await cache.memoize(cacheKey, description, async () => result);
         }
 
         logger.debug(`Chat completion successful, ${result.usage?.total_tokens ?? 0} tokens used`);
@@ -136,13 +141,17 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         maxTokens?: number;
         temperature?: number;
         model?: string;
+        context?: string; // Optional context for cache logging
       } = {}
     ): Promise<T> {
       const model = options.model ?? config.deployments.chat;
       const cacheKey = cache ? JSON.stringify({ messages, model, options, jsonSchema }) : null;
       
+      // Create human-readable description for cache logging
+      const description = options.context ?? `Structured completion with ${model}`;
+      
       if (cache && cacheKey) {
-        const cached = await cache.memoize(cacheKey, async () => null);
+        const cached = await cache.memoize(cacheKey, description, async () => null);
         if (cached) {
           logger.debug('Using cached structured completion');
           return cached as T;
@@ -180,7 +189,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         }
 
         if (cache && cacheKey) {
-          await cache.memoize(cacheKey, async () => result);
+          await cache.memoize(cacheKey, description, async () => result);
         }
 
         logger.debug(`Structured completion successful, ${response.usage?.total_tokens ?? 0} tokens used`);
@@ -191,12 +200,21 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       }
     },
 
-    async getEmbedding(text: string, model?: string): Promise<EmbeddingResponse> {
+    async getEmbedding(text: string, model?: string, context?: string): Promise<EmbeddingResponse> {
       const embeddingModel = model ?? config.deployments.embeddings;
       const cacheKey = cache ? JSON.stringify({ text, model: embeddingModel }) : null;
       
+      // Create human-readable description for cache logging
+      let description: string;
+      if (context) {
+        description = context;
+      } else {
+        const textPreview = text.length > 50 ? text.slice(0, 50) + '...' : text;
+        description = `Embedding for text: "${textPreview}"`;
+      }
+      
       if (cache && cacheKey) {
-        const cached = await cache.memoize(cacheKey, async () => null);
+        const cached = await cache.memoize(cacheKey, description, async () => null);
         if (cached) {
           logger.debug('Using cached embedding');
           return cached as EmbeddingResponse;
@@ -225,7 +243,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         };
 
         if (cache && cacheKey) {
-          await cache.memoize(cacheKey, async () => result);
+          await cache.memoize(cacheKey, description, async () => result);
         }
 
         logger.debug(`Embedding successful, ${result.usage?.total_tokens ?? 0} tokens used`);

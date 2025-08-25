@@ -90,7 +90,7 @@ async function main() {
 
         // Create summaries (array) if not exists
         if (!existingSummaries || existingSummaries.length === 0) {
-          const summaries = await createIssueSummaries(ai, issue, config, 3);
+          const summaries = await createIssueSummaries(ai, issue, config, issueKey, 3);
           summariesUpdater.set(issueKey, summaries);
           logger.debug(`Created summaries for ${issueKey}`);
         }
@@ -99,10 +99,11 @@ async function main() {
         if (!existingEmbeddings || existingEmbeddings.length === 0) {
           const summariesForIssue = summariesUpdater.get(issueKey) ?? [];
           const embeddingBase64Array: string[] = [];
-          for (const s of summariesForIssue) {
+          for (let i = 0; i < summariesForIssue.length; i++) {
+            const s = summariesForIssue[i]!;
             // Cap the string length for embedding input to avoid API errors
             const cappedSummary = truncateText(s, config.ai.maxEmbeddingInputLength);
-            const embeddingResponse = await ai.getEmbedding(cappedSummary);
+            const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
             const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
             embeddingBase64Array.push(embeddingBase64);
           }
@@ -135,7 +136,7 @@ async function main() {
   }
 }
 
-async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: Config, count = 3): Promise<string[]> {
+async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: Config, issueKey: string, count = 3): Promise<string[]> {
   // Truncate body and comments to stay within context limits
   const body = issue.body ? truncateText(issue.body, config.github.maxIssueBodyLength) : '';
   const recentComments = issue.comments
@@ -159,7 +160,10 @@ async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: C
   ];
 
   const jsonSchema = zodToJsonSchema(IssueSummariesSchema);
-  const response = await ai.structuredCompletion<IssueSummaries>(messages, jsonSchema, { maxTokens: 1200 });
+  const response = await ai.structuredCompletion<IssueSummaries>(messages, jsonSchema, { 
+    maxTokens: 1200,
+    context: `Get issue summary for ${issueKey}`,
+  });
   return response.summaries;
 }
 
