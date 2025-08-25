@@ -107,7 +107,9 @@ async function main() {
           const summariesForIssue = existingSummaries[issueKey]!;
           const embeddingBase64Array: string[] = [];
           for (const s of summariesForIssue) {
-            const embeddingResponse = await ai.getEmbedding(s);
+            // Cap the string length for embedding input to avoid API errors
+            const cappedSummary = truncateText(s, config.ai.maxEmbeddingInputLength);
+            const embeddingResponse = await ai.getEmbedding(cappedSummary);
             const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
             embeddingBase64Array.push(embeddingBase64);
           }

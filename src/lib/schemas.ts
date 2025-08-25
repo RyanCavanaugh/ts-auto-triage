@@ -120,6 +120,7 @@ export const ConfigSchema = z.object({
   ai: z.object({
     maxReproAttempts: z.number(),
     cacheEnabled: z.boolean(),
+    maxEmbeddingInputLength: z.number(),
   }),
 });
 

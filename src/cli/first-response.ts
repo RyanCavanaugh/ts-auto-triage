@@ -5,7 +5,7 @@ import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema, FAQResponseSchema, type IssueRef, type FAQResponse } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema, FAQResponseSchema, type IssueRef, type FAQResponse, type Config } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -64,7 +64,7 @@ async function main() {
     // Check for duplicates
     let duplicateMatches: string[] = [];
     try {
-      duplicateMatches = await findDuplicates(ai, issueBody, issue.title, issueRef);
+      duplicateMatches = await findDuplicates(ai, issueBody, issue.title, issueRef, config);
     } catch (error) {
       logger.debug(`Duplicate search failed: ${error}`);
     }
@@ -134,7 +134,7 @@ async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: str
   return response.has_match ? response.response ?? null : null;
 }
 
-async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef): Promise<string[]> {
+async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef, config: Config): Promise<string[]> {
   // Load embeddings and summaries (now arrays per issue)
   let summaries: Record<string, string[]> = {};
   let embeddings: Record<string, string[]> = {};
@@ -155,7 +155,11 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
 
   // Create embedding for current issue
   const currentIssueText = `${issueTitle}\n\n${issueBody.slice(0, 2000)}`;
-  const currentEmbedding = await ai.getEmbedding(currentIssueText);
+  // Cap the string length for embedding input to avoid API errors
+  const cappedText = currentIssueText.length > config.ai.maxEmbeddingInputLength 
+    ? currentIssueText.slice(0, config.ai.maxEmbeddingInputLength - 3) + '...'
+    : currentIssueText;
+  const currentEmbedding = await ai.getEmbedding(cappedText);
   
   // Calculate similarities
   const similarities: Array<{ issueKey: string; similarity: number; summary: string }> = [];
