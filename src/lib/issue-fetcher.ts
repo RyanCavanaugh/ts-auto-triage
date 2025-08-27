@@ -280,6 +280,9 @@ export function createIssueFetcher(
             break;
           }
           
+          let cachedIssuesInPage = 0;
+          const pageSize = issues.nodes.length;
+          
           for (const issue of issues.nodes) {
             const ref: IssueRef = { owner, repo, number: issue.number };
             
@@ -287,6 +290,7 @@ export function createIssueFetcher(
             const localIssue = await this.getLocalIssue(ref);
             if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updatedAt)) {
               logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
+              cachedIssuesInPage++;
               continue;
             }
             
@@ -296,6 +300,13 @@ export function createIssueFetcher(
             
             // Small delay to avoid overwhelming the API
             await sleep(100);
+          }
+          
+          // If entire page was already cached, stop processing
+          if (cachedIssuesInPage === pageSize && pageSize > 0) {
+            logger.info(`Entire page ${pageCount} (${pageSize} issues) was already up-to-date. Stopping early to avoid unnecessary API calls.`);
+            hasNextPage = false;
+            break;
           }
           
           hasNextPage = issues.pageInfo.hasNextPage;
