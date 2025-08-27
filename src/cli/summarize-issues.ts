@@ -53,7 +53,7 @@ async function main() {
     
     try {
       const files = await readdir(dataDir);
-      issueFiles = files.filter(f => f.endsWith('.json')).map(f => join(dataDir, f));
+      issueFiles = files.filter(f => f.endsWith('.json') && !f.endsWith('.embeddings.json')).map(f => join(dataDir, f));
     } catch {
       logger.error(`No issue data found in ${dataDir}. Run fetch-issues first.`);
       process.exit(1);
