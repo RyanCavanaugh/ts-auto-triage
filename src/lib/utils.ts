@@ -35,6 +35,10 @@ export function createIssueDataPath(ref: IssueRef): string {
   return `.data/${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}/${ref.number}.json`;
 }
 
+export function createIssueEmbeddingPath(ref: IssueRef): string {
+  return `.data/${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}/${ref.number}.embeddings.json`;
+}
+
 export function createActionFilePath(ref: IssueRef): string {
   return `.working/actions/${ref.owner.toLowerCase()}.${ref.repo.toLowerCase()}.${ref.number}.jsonc`;
 }

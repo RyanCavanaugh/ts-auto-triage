@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
-import { createConsoleLogger, createFileUpdater, embeddingToBase64 } from '../lib/utils.js';
+import { createConsoleLogger, embeddingToBase64, ensureDirectoryExists, createIssueEmbeddingPath, parseIssueRef } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, type Config, SummariesDataSchema } from '../lib/schemas.js';
 
@@ -58,12 +58,6 @@ async function main() {
 
     logger.info(`Found ${issueKeys.length} issues with summaries to process`);
 
-    // Create embeddings file updater with smaller auto-flush interval for memory efficiency
-    const embeddingsUpdater = createFileUpdater<string[]>('.data/embeddings.json', {
-      autoFlushInterval: 3, // Flush more frequently to reduce memory usage
-      logger,
-    });
-
     let processedCount = 0;
     let skippedCount = 0;
 
@@ -93,12 +87,40 @@ async function main() {
       }
 
       for (const issueKey of batchKeys) {
-        // Skip if embeddings already exist
-        const existingEmbeddings = embeddingsUpdater.get(issueKey);
-        
-        if (existingEmbeddings && Array.isArray(existingEmbeddings) && existingEmbeddings.length > 0) {
-          skippedCount++;
+        // Parse issue key to get owner/repo/number
+        const [ownerRepo, numberStr] = issueKey.split('#');
+        if (!ownerRepo || !numberStr) {
+          logger.warn(`Invalid issue key format: ${issueKey}`);
           continue;
+        }
+        
+        const [owner, repo] = ownerRepo.split('/');
+        if (!owner || !repo) {
+          logger.warn(`Invalid owner/repo format in key: ${issueKey}`);
+          continue;
+        }
+        
+        const number = parseInt(numberStr, 10);
+        if (isNaN(number)) {
+          logger.warn(`Invalid issue number in key: ${issueKey}`);
+          continue;
+        }
+
+        // Create individual embedding file path using utility function
+        const issueRef = { owner, repo, number };
+        const embeddingFilePath = createIssueEmbeddingPath(issueRef);
+        
+        // Skip if embeddings already exist
+        let existingEmbeddings: string[] | undefined;
+        try {
+          const existingContent = await readFile(embeddingFilePath, 'utf-8');
+          existingEmbeddings = JSON.parse(existingContent) as string[];
+          if (Array.isArray(existingEmbeddings) && existingEmbeddings.length > 0) {
+            skippedCount++;
+            continue;
+          }
+        } catch {
+          // File doesn't exist, continue to create embeddings
         }
 
         logger.debug(`Computing embeddings for ${issueKey}...`);
@@ -123,14 +145,17 @@ async function main() {
             embeddingBase64Array.push(embeddingBase64);
           }
 
-          embeddingsUpdater.set(issueKey, embeddingBase64Array);
+          // Write individual embedding file
+          ensureDirectoryExists(embeddingFilePath);
+          await writeFile(embeddingFilePath, JSON.stringify(embeddingBase64Array, null, 2));
+          
           logger.debug(`Created embeddings for ${issueKey} (${embeddingBase64Array.length} embeddings)`);
 
           processedCount++;
 
           // Log progress and suggest garbage collection
           if (processedCount % 10 === 0) {
-            logger.info(`Processed ${processedCount} issues (pending: embeddings=${embeddingsUpdater.getPendingWrites()})`);
+            logger.info(`Processed ${processedCount} issues`);
             // Hint garbage collector to clean up
             if (global.gc) {
               global.gc();
@@ -146,21 +171,12 @@ async function main() {
       // Clear batch data from memory after processing
       batchSummariesData = {};
       
-      // Force flush after each batch to prevent memory accumulation
-      await embeddingsUpdater.flush();
-      
-      // Clear file updater memory cache to prevent memory leaks
-      embeddingsUpdater.clearMemoryCache();
-      
       // Force garbage collection if available
       if (global.gc) {
         global.gc();
         logger.debug(`Completed batch ${Math.floor(batchStart / batchSize) + 1}, forced garbage collection`);
       }
     }
-
-    // Ensure all changes are saved
-    await embeddingsUpdater.dispose();
 
     logger.info(`Embedding computation complete! Processed: ${processedCount}, Skipped: ${skippedCount}, Total: ${issueKeys.length}`);
 

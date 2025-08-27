@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema, FAQResponseSchema, type IssueRef, type FAQResponse, type Config } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, FAQResponseSchema, type IssueRef, type FAQResponse, type Config } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -139,22 +139,14 @@ async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: str
 }
 
 async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef, config: Config): Promise<string[]> {
-  // Load embeddings and summaries (now arrays per issue)
+  // Load summaries 
   let summaries: Record<string, string[]> = {};
-  let embeddings: Record<string, string[]> = {};
   
   try {
     const summariesContent = await readFile('.data/summaries.json', 'utf-8');
     summaries = SummariesDataSchema.parse(JSON.parse(summariesContent));
   } catch {
     return []; // No summaries available
-  }
-  
-  try {
-    const embeddingsContent = await readFile('.data/embeddings.json', 'utf-8');
-    embeddings = EmbeddingsDataSchema.parse(JSON.parse(embeddingsContent));
-  } catch {
-    return []; // No embeddings available
   }
 
   // Create embedding for current issue
@@ -166,54 +158,116 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
   const currentEmbedding = await ai.getEmbedding(cappedText, undefined, `Get embedding for current issue ${issueKey}`);
   
-  // Calculate similarities
+  // Calculate similarities by finding and reading all embedding files
   const similarities: Array<{ issueKey: string; similarity: number; summary: string }> = [];
   
-  for (const [issueKey, embeddingValue] of Object.entries(embeddings)) {
-    // Skip self
-    const issueKeyStr = `${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}#${issueRef.number}`;
-    if (issueKey === issueKeyStr) continue;
+  try {
+    // Recursively find all .embeddings.json files in .data directory
+    const embeddingFiles = await findEmbeddingFiles('.data');
     
-    // Skip if no summary
-    if (!summaries[issueKey]) continue;
-    
-    // embeddingValue may be an array of base64 strings (one per summary), but support legacy single-string values too
-    const embeddingList: string[] = Array.isArray(embeddingValue) ? embeddingValue : [embeddingValue as string];
-    
-    let bestSim = -Infinity;
-    let bestIndex = -1;
-    
-    for (let i = 0; i < embeddingList.length; i++) {
-      const base64 = embeddingList[i];
-      if (!base64) continue; // guard against undefined
+    for (const filePath of embeddingFiles) {
+      // Extract issue key from file path: .data/owner/repo/123.embeddings.json -> owner/repo#123
+      const pathParts = filePath.split('/');
+      if (pathParts.length < 4) continue;
+      
+      const filename = pathParts[pathParts.length - 1];
+      const repo = pathParts[pathParts.length - 2];
+      const owner = pathParts[pathParts.length - 3];
+      
+      if (!filename?.endsWith('.embeddings.json')) continue;
+      
+      const numberStr = filename.replace('.embeddings.json', '');
+      const number = parseInt(numberStr, 10);
+      if (isNaN(number)) continue;
+      
+      const fileIssueKey = `${owner}/${repo}#${number}`;
+      
+      // Skip self
+      const currentIssueKeyStr = `${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}#${issueRef.number}`;
+      if (fileIssueKey === currentIssueKeyStr) continue;
+      
+      // Skip if no summary for this issue
+      if (!summaries[fileIssueKey]) continue;
+      
       try {
-        const embeddingArray = embeddingFromBase64(base64);
-        if (!embeddingArray || embeddingArray.length !== currentEmbedding.embedding.length) continue;
+        // Read individual embedding file
+        const embeddingContent = await readFile(filePath, 'utf-8');
+        const embeddingList: string[] = JSON.parse(embeddingContent);
         
-        // Use optimized Float32Array similarity calculation
-        const currentEmbeddingFloat32 = new Float32Array(currentEmbedding.embedding);
-        const similarity = calculateCosineSimilarity(currentEmbeddingFloat32, embeddingArray);
+        if (!Array.isArray(embeddingList) || embeddingList.length === 0) continue;
         
-        if (similarity > bestSim) {
-          bestSim = similarity;
-          bestIndex = i;
+        let bestSim = -Infinity;
+        let bestIndex = -1;
+        
+        for (let i = 0; i < embeddingList.length; i++) {
+          const base64 = embeddingList[i];
+          if (!base64) continue;
+          
+          try {
+            const embeddingArray = embeddingFromBase64(base64);
+            if (!embeddingArray || embeddingArray.length !== currentEmbedding.embedding.length) continue;
+            
+            // Use optimized Float32Array similarity calculation
+            const currentEmbeddingFloat32 = new Float32Array(currentEmbedding.embedding);
+            const similarity = calculateCosineSimilarity(currentEmbeddingFloat32, embeddingArray);
+            
+            if (similarity > bestSim) {
+              bestSim = similarity;
+              bestIndex = i;
+            }
+          } catch {
+            continue;
+          }
         }
-      } catch {
+        
+        // Use the best similarity for the issue and the corresponding summary (if available)
+        if (bestIndex >= 0 && bestSim > 0.2) {
+          const summariesForKey = summaries[fileIssueKey];
+          const summaryText = Array.isArray(summariesForKey) ? (summariesForKey[bestIndex] ?? summariesForKey[0]) : (summariesForKey as string);
+          similarities.push({ issueKey: fileIssueKey, similarity: bestSim, summary: summaryText ?? '' });
+        }
+        
+      } catch (error) {
+        // Skip files that can't be read or parsed
         continue;
       }
     }
     
-    // Use the best similarity for the issue and the corresponding summary (if available)
-    if (bestIndex >= 0 && bestSim > 0.2) {
-      const summariesForKey = summaries[issueKey];
-      const summaryText = Array.isArray(summariesForKey) ? (summariesForKey[bestIndex] ?? summariesForKey[0]) : (summariesForKey as string);
-      similarities.push({ issueKey, similarity: bestSim, summary: summaryText ?? '' });
-    }
+  } catch (error) {
+    // If we can't read the .data directory, return empty array
+    return [];
   }
   
   // Sort by similarity and return top 3
   similarities.sort((a, b) => b.similarity - a.similarity);
   return similarities.slice(0, 3).map(s => `#${s.issueKey.split('#')[1]} (${Math.round(s.similarity * 100)}% similar): ${s.summary.slice(0, 200)}...`);
+}
+
+/**
+ * Recursively find all .embeddings.json files in a directory
+ */
+async function findEmbeddingFiles(dir: string): Promise<string[]> {
+  const result: string[] = [];
+  
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      
+      if (entry.isDirectory()) {
+        // Recursively search subdirectories
+        const subFiles = await findEmbeddingFiles(fullPath);
+        result.push(...subFiles);
+      } else if (entry.isFile() && entry.name.endsWith('.embeddings.json')) {
+        result.push(fullPath);
+      }
+    }
+  } catch {
+    // Directory doesn't exist or can't be read
+  }
+  
+  return result;
 }
 
 main().catch(console.error);
