@@ -61,120 +61,91 @@ async function main() {
     let processedCount = 0;
     let skippedCount = 0;
 
-    // Process in smaller batches to avoid memory accumulation
-    const batchSize = 50; // Process 50 issues at a time
-    
-    for (let batchStart = 0; batchStart < issueKeys.length; batchStart += batchSize) {
-      const batchEnd = Math.min(batchStart + batchSize, issueKeys.length);
-      const batchKeys = issueKeys.slice(batchStart, batchEnd);
+    // Load summaries data once
+    let summariesData: Record<string, string[]>;
+    try {
+      const summariesContent = await readFile(summariesPath, 'utf-8');
+      summariesData = SummariesDataSchema.parse(JSON.parse(summariesContent));
+    } catch (error) {
+      logger.error(`Failed to load summaries: ${error}`);
+      process.exit(1);
+    }
+
+    // Process each issue individually
+    for (const issueKey of issueKeys) {
+      // Parse issue key to get owner/repo/number
+      const [ownerRepo, numberStr] = issueKey.split('#');
+      if (!ownerRepo || !numberStr) {
+        logger.warn(`Invalid issue key format: ${issueKey}`);
+        continue;
+      }
       
-      logger.info(`Processing batch ${Math.floor(batchStart / batchSize) + 1}/${Math.ceil(issueKeys.length / batchSize)} (${batchKeys.length} issues)`);
+      const [owner, repo] = ownerRepo.split('/');
+      if (!owner || !repo) {
+        logger.warn(`Invalid owner/repo format in key: ${issueKey}`);
+        continue;
+      }
       
-      // Load only the current batch of summaries to save memory
-      let batchSummariesData: Record<string, string[]>;
-      try {
-        const summariesContent = await readFile(summariesPath, 'utf-8');
-        const fullSummariesData = SummariesDataSchema.parse(JSON.parse(summariesContent));
-        batchSummariesData = {};
-        for (const key of batchKeys) {
-          if (fullSummariesData[key]) {
-            batchSummariesData[key] = fullSummariesData[key];
-          }
-        }
-      } catch (error) {
-        logger.error(`Failed to load summaries for batch: ${error}`);
+      const number = parseInt(numberStr, 10);
+      if (isNaN(number)) {
+        logger.warn(`Invalid issue number in key: ${issueKey}`);
         continue;
       }
 
-      for (const issueKey of batchKeys) {
-        // Parse issue key to get owner/repo/number
-        const [ownerRepo, numberStr] = issueKey.split('#');
-        if (!ownerRepo || !numberStr) {
-          logger.warn(`Invalid issue key format: ${issueKey}`);
+      // Create individual embedding file path using utility function
+      const issueRef = { owner, repo, number };
+      const embeddingFilePath = createIssueEmbeddingPath(issueRef);
+      
+      // Skip if embeddings already exist
+      try {
+        const existingContent = await readFile(embeddingFilePath, 'utf-8');
+        const existingEmbeddings = JSON.parse(existingContent) as string[];
+        if (Array.isArray(existingEmbeddings) && existingEmbeddings.length > 0) {
+          skippedCount++;
           continue;
         }
-        
-        const [owner, repo] = ownerRepo.split('/');
-        if (!owner || !repo) {
-          logger.warn(`Invalid owner/repo format in key: ${issueKey}`);
-          continue;
-        }
-        
-        const number = parseInt(numberStr, 10);
-        if (isNaN(number)) {
-          logger.warn(`Invalid issue number in key: ${issueKey}`);
-          continue;
-        }
-
-        // Create individual embedding file path using utility function
-        const issueRef = { owner, repo, number };
-        const embeddingFilePath = createIssueEmbeddingPath(issueRef);
-        
-        // Skip if embeddings already exist
-        let existingEmbeddings: string[] | undefined;
-        try {
-          const existingContent = await readFile(embeddingFilePath, 'utf-8');
-          existingEmbeddings = JSON.parse(existingContent) as string[];
-          if (Array.isArray(existingEmbeddings) && existingEmbeddings.length > 0) {
-            skippedCount++;
-            continue;
-          }
-        } catch {
-          // File doesn't exist, continue to create embeddings
-        }
-
-        logger.debug(`Computing embeddings for ${issueKey}...`);
-
-        try {
-          const summariesForIssue = batchSummariesData[issueKey] ?? [];
-          if (summariesForIssue.length === 0) {
-            logger.warn(`No summaries found for ${issueKey}, skipping...`);
-            continue;
-          }
-
-          // Create embeddings array (one per summary)
-          const embeddingBase64Array: string[] = [];
-          for (let i = 0; i < summariesForIssue.length; i++) {
-            const summary = summariesForIssue[i]!;
-            // Cap the string length for embedding input to avoid API errors
-            const cappedSummary = truncateText(summary, config.ai.maxEmbeddingInputLength);
-            const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
-            
-            // Convert to compact binary format (~3.8x compression vs JSON)
-            const embeddingBase64 = embeddingToBase64(embeddingResponse.embedding);
-            embeddingBase64Array.push(embeddingBase64);
-          }
-
-          // Write individual embedding file
-          ensureDirectoryExists(embeddingFilePath);
-          await writeFile(embeddingFilePath, JSON.stringify(embeddingBase64Array, null, 2));
-          
-          logger.debug(`Created embeddings for ${issueKey} (${embeddingBase64Array.length} embeddings)`);
-
-          processedCount++;
-
-          // Log progress and suggest garbage collection
-          if (processedCount % 10 === 0) {
-            logger.info(`Processed ${processedCount} issues`);
-            // Hint garbage collector to clean up
-            if (global.gc) {
-              global.gc();
-            }
-          }
-
-        } catch (error) {
-          logger.error(`Failed to compute embeddings for ${issueKey}: ${error}`);
-          continue;
-        }
+      } catch {
+        // File doesn't exist, continue to create embeddings
       }
-      
-      // Clear batch data from memory after processing
-      batchSummariesData = {};
-      
-      // Force garbage collection if available
-      if (global.gc) {
-        global.gc();
-        logger.debug(`Completed batch ${Math.floor(batchStart / batchSize) + 1}, forced garbage collection`);
+
+      logger.debug(`Computing embeddings for ${issueKey}...`);
+
+      try {
+        const summariesForIssue = summariesData[issueKey] ?? [];
+        if (summariesForIssue.length === 0) {
+          logger.warn(`No summaries found for ${issueKey}, skipping...`);
+          continue;
+        }
+
+        // Create embeddings array (one per summary)
+        const embeddingBase64Array: string[] = [];
+        for (let i = 0; i < summariesForIssue.length; i++) {
+          const summary = summariesForIssue[i]!;
+          // Cap the string length for embedding input to avoid API errors
+          const cappedSummary = truncateText(summary, config.ai.maxEmbeddingInputLength);
+          const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
+          
+          // Convert to compact binary format (~3.8x compression vs JSON)
+          const embeddingBase64 = embeddingToBase64(embeddingResponse.embedding);
+          embeddingBase64Array.push(embeddingBase64);
+        }
+
+        // Write individual embedding file
+        ensureDirectoryExists(embeddingFilePath);
+        await writeFile(embeddingFilePath, JSON.stringify(embeddingBase64Array, null, 2));
+        
+        logger.debug(`Created embeddings for ${issueKey} (${embeddingBase64Array.length} embeddings)`);
+
+        processedCount++;
+
+        // Log progress
+        if (processedCount % 10 === 0) {
+          logger.info(`Processed ${processedCount} issues`);
+        }
+
+      } catch (error) {
+        logger.error(`Failed to compute embeddings for ${issueKey}: ${error}`);
+        continue;
       }
     }
 
