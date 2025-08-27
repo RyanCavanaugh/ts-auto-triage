@@ -10,7 +10,7 @@ import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
   const logger = createConsoleLogger();
-  
+
   try {
     // Parse command line arguments
     const args = process.argv.slice(2);
@@ -22,7 +22,7 @@ async function main() {
 
     const issueRefInput = args[0]!;
     const issueRef = parseIssueRef(issueRefInput);
-    
+
     logger.info(`Checking first response for: ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`);
 
     // Load configuration
@@ -65,13 +65,14 @@ async function main() {
     let similarIssues: string[] = [];
     try {
       similarIssues = await findDuplicates(ai, issueBody, issue.title, issueRef, config);
+      logger.debug(`Found ${similarIssues.length} similar issues`);
     } catch (error) {
       logger.debug(`Similar issue search failed: ${error}`);
     }
 
     // Generate action if needed
     const actions = [];
-    
+
     if (faqResponse) {
       logger.info('Found relevant FAQ entry, creating response action');
       actions.push({
@@ -98,7 +99,7 @@ async function main() {
 
       const actionFilePath = `.working/actions/${issueRef.owner.toLowerCase()}.${issueRef.repo.toLowerCase()}.${issueRef.number}.jsonc`;
       ensureDirectoryExists(actionFilePath);
-      
+
       const actionFileContent = `/* Proposed actions for ${formatIssueRef(issueRef)}
    AI-generated first response based on FAQ matching and duplicate detection */
 ${JSON.stringify(actionFile, null, 2)}`;
@@ -130,120 +131,84 @@ async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: str
 
   const jsonSchema = zodToJsonSchema(FAQResponseSchema);
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-  const response = await ai.structuredCompletion<FAQResponse>(messages, jsonSchema, { 
+  const response = await ai.structuredCompletion<FAQResponse>(messages, jsonSchema, {
     maxTokens: 500,
     context: `Check FAQ matches for ${issueKey}`,
   });
-  
+
   return response.has_match ? response.response ?? null : null;
 }
 
 async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef, config: Config): Promise<string[]> {
   // Load summaries 
-  let summaries: Record<string, string[]> = {};
-  
-  try {
-    const summariesContent = await readFile('.data/summaries.json', 'utf-8');
-    summaries = SummariesDataSchema.parse(JSON.parse(summariesContent));
-  } catch {
-    return []; // No summaries available
-  }
+  const summariesContent = await readFile('.data/summaries.json', 'utf-8');
+  const summaries = SummariesDataSchema.parse(JSON.parse(summariesContent));
 
   // Create embedding for current issue
   const currentIssueText = `${issueTitle}\n\n${issueBody.slice(0, 2000)}`;
   // Cap the string length for embedding input to avoid API errors
-  const cappedText = currentIssueText.length > config.ai.maxEmbeddingInputLength 
+  const cappedText = currentIssueText.length > config.ai.maxEmbeddingInputLength
     ? currentIssueText.slice(0, config.ai.maxEmbeddingInputLength - 3) + '...'
     : currentIssueText;
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
   const currentEmbedding = await ai.getEmbedding(cappedText, undefined, `Get embedding for current issue ${issueKey}`);
-  
+
   // Calculate similarities by finding and reading all embedding files
   const similarities: Array<{ issueKey: string; similarity: number; summary: string }> = [];
-  
-  try {
-    // Recursively find all .embeddings.json files in .data directory
-    const embeddingFiles = await findEmbeddingFiles('.data');
-    
-    for (const filePath of embeddingFiles) {
-      // Extract issue key from file path: .data/owner/repo/123.embeddings.json -> owner/repo#123
-      const pathParts = filePath.split('/');
-      if (pathParts.length < 4) continue;
-      
-      const filename = pathParts[pathParts.length - 1];
-      const repo = pathParts[pathParts.length - 2];
-      const owner = pathParts[pathParts.length - 3];
-      
-      if (!filename?.endsWith('.embeddings.json')) continue;
-      
-      const numberStr = filename.replace('.embeddings.json', '');
-      const number = parseInt(numberStr, 10);
-      if (isNaN(number)) continue;
-      
-      const fileIssueKey = `${owner}/${repo}#${number}`;
-      
-      // Skip self
-      const currentIssueKeyStr = `${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}#${issueRef.number}`;
-      if (fileIssueKey === currentIssueKeyStr) continue;
-      
-      // Skip if no summary for this issue
-      if (!summaries[fileIssueKey]) continue;
-      
-      try {
-        // Read individual embedding file
-        const embeddingContent = await readFile(filePath, 'utf-8');
-        const embeddingList: string[] = JSON.parse(embeddingContent);
-        
-        if (!Array.isArray(embeddingList) || embeddingList.length === 0) continue;
-        
-        let bestSim = -Infinity;
-        let bestIndex = -1;
-        
-        for (let i = 0; i < embeddingList.length; i++) {
-          const base64 = embeddingList[i];
-          if (!base64) continue;
-          
-          try {
-            const embeddingArray = embeddingFromBase64(base64);
-            if (!embeddingArray || embeddingArray.length !== currentEmbedding.embedding.length) continue;
-            
-            // Use optimized Float32Array similarity calculation
-            const currentEmbeddingFloat32 = new Float32Array(currentEmbedding.embedding);
-            const similarity = calculateCosineSimilarity(currentEmbeddingFloat32, embeddingArray);
-            
-            if (similarity > bestSim) {
-              bestSim = similarity;
-              bestIndex = i;
-            }
-          } catch {
-            continue;
-          }
-        }
-        
-        // Use the best similarity for the issue and the corresponding summary (if available)
-        if (bestIndex >= 0) {
-          const summariesForKey = summaries[fileIssueKey];
-          const summaryText = Array.isArray(summariesForKey) ? (summariesForKey[bestIndex] ?? summariesForKey[0]) : (summariesForKey as string);
-          similarities.push({ issueKey: fileIssueKey, similarity: bestSim, summary: summaryText ?? '' });
-        }
-        
-      } catch (error) {
-        // Skip files that can't be read or parsed
-        continue;
+
+  // Recursively find all .embeddings.json files in .data directory
+  const embeddingFiles = await findEmbeddingFiles('.data');
+
+  for (const filePath of embeddingFiles) {
+    // Extract issue key from file path: .data/owner/repo/123.embeddings.json -> owner/repo#123
+    const pathParts = filePath.replace(/\\/g, '/').split('/');
+    const filename = pathParts[pathParts.length - 1]!;
+    const repo = pathParts[pathParts.length - 2];
+    const owner = pathParts[pathParts.length - 3];
+
+    const numberStr = filename.replace('.embeddings.json', '');
+    const number = parseInt(numberStr, 10);
+
+    const fileIssueKey = `${owner}/${repo}#${number}`;
+
+    // Skip self
+    const currentIssueKeyStr = `${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}#${issueRef.number}`;
+    if (fileIssueKey === currentIssueKeyStr) continue;
+
+    // Read individual embedding file
+    const embeddingContent = await readFile(filePath, 'utf-8');
+    const embeddingList: string[] = JSON.parse(embeddingContent);
+
+    let bestSim = -Infinity;
+    let bestIndex = -1;
+
+    for (let i = 0; i < embeddingList.length; i++) {
+      const base64 = embeddingList[i]!;
+      const embeddingArray = embeddingFromBase64(base64);
+
+      // Use optimized Float32Array similarity calculation
+      const currentEmbeddingFloat32 = new Float32Array(currentEmbedding.embedding);
+      const similarity = calculateCosineSimilarity(currentEmbeddingFloat32, embeddingArray);
+
+      if (similarity > bestSim) {
+        bestSim = similarity;
+        bestIndex = i;
       }
     }
-    
-  } catch (error) {
-    // If we can't read the .data directory, return empty array
-    return [];
+
+    // Use the best similarity for the issue and the corresponding summary (if available)
+    if (bestIndex >= 0) {
+      const summariesForKey = summaries[fileIssueKey];
+      similarities.push({ issueKey: fileIssueKey, similarity: bestSim, summary: '' });
+    }
   }
-  
+
   // Sort by similarity and return top 5 with emojis for high similarity
   similarities.sort((a, b) => b.similarity - a.similarity);
   const top5 = similarities.slice(0, 5);
-  
+
   const HIGH_SIMILARITY_THRESHOLD = 0.7; // Threshold for high similarity emoji
-  
+
   return top5.map(s => {
     const emoji = s.similarity >= HIGH_SIMILARITY_THRESHOLD ? '🔥 ' : '';
     const percentage = Math.round(s.similarity * 100);
@@ -256,13 +221,13 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
  */
 async function findEmbeddingFiles(dir: string): Promise<string[]> {
   const result: string[] = [];
-  
+
   try {
     const entries = await readdir(dir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
-      
+
       if (entry.isDirectory()) {
         // Recursively search subdirectories
         const subFiles = await findEmbeddingFiles(fullPath);
@@ -274,7 +239,7 @@ async function findEmbeddingFiles(dir: string): Promise<string[]> {
   } catch {
     // Directory doesn't exist or can't be read
   }
-  
+
   return result;
 }
 
