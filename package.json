@@ -1,0 +1,54 @@
+{
+  "name": "ts-auto-triage",
+  "version": "1.0.0",
+  "description": "Backlog grooming and issue management tool for TypeScript",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "repro-issue": "dist/cli/repro-issue.js",
+    "fetch-issues": "dist/cli/fetch-issues.js",
+    "fetch-issue": "dist/cli/fetch-issue.js",
+    "summarize-issues": "dist/cli/summarize-issues.js",
+    "compute-embeddings": "dist/cli/compute-embeddings.js",
+    "curate-issue": "dist/cli/curate-issue.js",
+    "exec-action": "dist/cli/exec-action.js",
+    "first-response": "dist/cli/first-response.js",
+    "check-ai": "dist/cli/check-ai.js",
+    "twoslash": "dist/cli/twoslash.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "lint": "eslint src/**/*.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "typescript",
+    "github",
+    "issues",
+    "triage",
+    "automation"
+  ],
+  "author": "Ryan Cavanaugh",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.11",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.0.0",
+    "@azure/openai": "^2.0.0",
+    "@octokit/graphql": "^7.0.0",
+    "@octokit/rest": "^20.0.0",
+    "jsonc-parser": "^3.2.0",
+    "openai": "^5.13.1",
+    "zod": "^3.22.0"
+  }
+}

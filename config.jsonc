@@ -1,0 +1,28 @@
+{
+  // Configuration for ts-auto-triage tool
+  "typescript": {
+    "tscPath": "tsc",
+    "lspEntryPoint": "typescript-language-server"
+  },
+  "azure": {
+    "openai": {
+      // Update these endpoints as needed
+      "endpoint": "https://ryanca-aoai.openai.azure.com/",
+      "deployments": {
+        "chat": "gpt-4o",
+        "embeddings": "text-embedding-3-large"
+      }
+    }
+  },
+  "github": {
+    "maxIssueBodyLength": 8000,
+    "maxCommentLength": 2000,
+    "rateLimitRetryDelay": 5000,
+    "maxRetries": 3
+  },
+  "ai": {
+    "maxReproAttempts": 3,
+    "cacheEnabled": true,
+    "maxEmbeddingInputLength": 8000
+  }
+}
