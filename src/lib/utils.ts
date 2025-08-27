@@ -152,3 +152,46 @@ export function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
 
 // Re-export file updater
 export { createFileUpdater, type FileUpdater, type FileUpdaterOptions } from './file-updater.js';
+
+/**
+ * Converts an embedding array to compact base64 representation.
+ * This provides ~3.8x compression vs JSON representation.
+ */
+export function embeddingToBase64(embedding: number[]): string {
+  const float32Array = new Float32Array(embedding);
+  return Buffer.from(float32Array.buffer).toString('base64');
+}
+
+/**
+ * Converts a base64 embedding back to Float32Array for computation.
+ * Used for duplicate detection and similarity calculations.
+ */
+export function embeddingFromBase64(base64: string): Float32Array {
+  const buffer = Buffer.from(base64, 'base64');
+  return new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4);
+}
+
+/**
+ * Calculate cosine similarity between two embeddings.
+ * Optimized for Float32Array inputs from embeddingFromBase64().
+ */
+export function calculateCosineSimilarity(a: Float32Array, b: Float32Array): number {
+  if (a.length !== b.length) {
+    throw new Error('Embeddings must have the same length');
+  }
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    const aVal = a[i]!;
+    const bVal = b[i]!;
+    dotProduct += aVal * bVal;
+    normA += aVal * aVal;
+    normB += bVal * bVal;
+  }
+
+  const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+  return magnitude === 0 ? 0 : dotProduct / magnitude;
+}

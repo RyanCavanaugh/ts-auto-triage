@@ -3,7 +3,7 @@
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, EmbeddingsDataSchema, SummariesDataSchema, FAQResponseSchema, type IssueRef, type FAQResponse, type Config } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
@@ -187,10 +187,13 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
       const base64 = embeddingList[i];
       if (!base64) continue; // guard against undefined
       try {
-        const embeddingBuffer = Buffer.from(base64, 'base64');
-        const embeddingArray = new Float32Array(embeddingBuffer.buffer);
+        const embeddingArray = embeddingFromBase64(base64);
         if (!embeddingArray || embeddingArray.length !== currentEmbedding.embedding.length) continue;
-        const similarity = cosineSimilarity(currentEmbedding.embedding, Array.from(embeddingArray));
+        
+        // Use optimized Float32Array similarity calculation
+        const currentEmbeddingFloat32 = new Float32Array(currentEmbedding.embedding);
+        const similarity = calculateCosineSimilarity(currentEmbeddingFloat32, embeddingArray);
+        
         if (similarity > bestSim) {
           bestSim = similarity;
           bestIndex = i;
@@ -211,13 +214,6 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
   // Sort by similarity and return top 3
   similarities.sort((a, b) => b.similarity - a.similarity);
   return similarities.slice(0, 3).map(s => `#${s.issueKey.split('#')[1]} (${Math.round(s.similarity * 100)}% similar): ${s.summary.slice(0, 200)}...`);
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  const dotProduct = a.reduce((sum, ai, i) => sum + ai * b[i]!, 0);
-  const magnitudeA = Math.sqrt(a.reduce((sum, ai) => sum + ai * ai, 0));
-  const magnitudeB = Math.sqrt(b.reduce((sum, bi) => sum + bi * bi, 0));
-  return dotProduct / (magnitudeA * magnitudeB);
 }
 
 main().catch(console.error);

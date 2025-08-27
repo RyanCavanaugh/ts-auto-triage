@@ -23,6 +23,9 @@ export interface FileUpdater<T> {
   /** Get all current data */
   getAll(): Record<string, T>;
   
+  /** Pre-load data from disk (call once for better performance) */
+  preload(): Promise<void>;
+  
   /** Check if there are unsaved changes */
   hasChanges(): boolean;
   
@@ -139,6 +142,10 @@ export function createFileUpdater<T>(
 
     getAll(): Record<string, T> {
       return { ...currentData };
+    },
+
+    async preload(): Promise<void> {
+      await loadExistingData();
     },
 
     hasChanges(): boolean {

@@ -43,6 +43,10 @@ async function main() {
       logger,
     });
 
+    // Pre-load existing summaries to avoid repeated file loading during get() calls
+    await summariesUpdater.preload();
+    logger.debug('Pre-loaded existing summaries data for fast lookups');
+
     // Find all issue files for this repository
     const dataDir = `.data/${owner.toLowerCase()}/${repo.toLowerCase()}`;
     let issueFiles: string[] = [];

@@ -2,7 +2,7 @@
 
 import { readFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
-import { createConsoleLogger, createFileUpdater } from '../lib/utils.js';
+import { createConsoleLogger, createFileUpdater, embeddingToBase64 } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, type Config, SummariesDataSchema } from '../lib/schemas.js';
 
@@ -117,7 +117,9 @@ async function main() {
             // Cap the string length for embedding input to avoid API errors
             const cappedSummary = truncateText(summary, config.ai.maxEmbeddingInputLength);
             const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
-            const embeddingBase64 = Buffer.from(new Float32Array(embeddingResponse.embedding).buffer).toString('base64');
+            
+            // Convert to compact binary format (~3.8x compression vs JSON)
+            const embeddingBase64 = embeddingToBase64(embeddingResponse.embedding);
             embeddingBase64Array.push(embeddingBase64);
           }
 
