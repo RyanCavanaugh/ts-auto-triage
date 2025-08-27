@@ -106,6 +106,7 @@ import { z } from 'zod';
 export function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
   // Simple conversion for basic Zod schemas to JSON Schema
   // This is a minimal implementation for the schemas we use
+  // Note: For OpenAI's strict mode, ALL properties must be in the required array
   
   if (schema instanceof z.ZodObject) {
     const shape = schema.shape;
@@ -114,9 +115,9 @@ export function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
     
     for (const [key, value] of Object.entries(shape)) {
       properties[key] = zodToJsonSchema(value as z.ZodType);
-      if (!(value instanceof z.ZodOptional)) {
-        required.push(key);
-      }
+      // For OpenAI strict mode, all properties must be required
+      // Optional fields are handled by including them but allowing null/undefined
+      required.push(key);
     }
     
     return {
@@ -147,7 +148,14 @@ export function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
   }
   
   if (schema instanceof z.ZodOptional) {
-    return zodToJsonSchema(schema.unwrap());
+    // For optional fields, allow null or the underlying type
+    const innerSchema = zodToJsonSchema(schema.unwrap());
+    return {
+      anyOf: [
+        innerSchema,
+        { type: 'null' }
+      ]
+    };
   }
   
   // Fallback for unsupported types

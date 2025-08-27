@@ -61,12 +61,12 @@ async function main() {
       logger.debug('No FAQ.md file found, skipping FAQ check');
     }
 
-    // Check for duplicates
-    let duplicateMatches: string[] = [];
+    // Check for duplicates and similar issues
+    let similarIssues: string[] = [];
     try {
-      duplicateMatches = await findDuplicates(ai, issueBody, issue.title, issueRef, config);
+      similarIssues = await findDuplicates(ai, issueBody, issue.title, issueRef, config);
     } catch (error) {
-      logger.debug(`Duplicate search failed: ${error}`);
+      logger.debug(`Similar issue search failed: ${error}`);
     }
 
     // Generate action if needed
@@ -80,12 +80,12 @@ async function main() {
       });
     }
 
-    if (duplicateMatches.length > 0) {
-      logger.info(`Found ${duplicateMatches.length} potential duplicates`);
-      const duplicateComment = `This issue appears to be similar to:\n\n${duplicateMatches.map(m => `- ${m}`).join('\n')}\n\nPlease check if any of these resolve your issue before proceeding.`;
+    if (similarIssues.length > 0) {
+      logger.info(`Found ${similarIssues.length} similar issues`);
+      const similarComment = `Here are the most similar issues I found:\n\n${similarIssues.map(s => `- ${s}`).join('\n')}\n\nPlease check if any of these resolve your issue before proceeding.`;
       actions.push({
         kind: 'add_comment' as const,
-        body: duplicateComment,
+        body: similarComment,
       });
     }
 
@@ -221,7 +221,7 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
         }
         
         // Use the best similarity for the issue and the corresponding summary (if available)
-        if (bestIndex >= 0 && bestSim > 0.2) {
+        if (bestIndex >= 0) {
           const summariesForKey = summaries[fileIssueKey];
           const summaryText = Array.isArray(summariesForKey) ? (summariesForKey[bestIndex] ?? summariesForKey[0]) : (summariesForKey as string);
           similarities.push({ issueKey: fileIssueKey, similarity: bestSim, summary: summaryText ?? '' });
@@ -238,9 +238,17 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
     return [];
   }
   
-  // Sort by similarity and return top 3
+  // Sort by similarity and return top 5 with emojis for high similarity
   similarities.sort((a, b) => b.similarity - a.similarity);
-  return similarities.slice(0, 3).map(s => `#${s.issueKey.split('#')[1]} (${Math.round(s.similarity * 100)}% similar): ${s.summary.slice(0, 200)}...`);
+  const top5 = similarities.slice(0, 5);
+  
+  const HIGH_SIMILARITY_THRESHOLD = 0.7; // Threshold for high similarity emoji
+  
+  return top5.map(s => {
+    const emoji = s.similarity >= HIGH_SIMILARITY_THRESHOLD ? '🔥 ' : '';
+    const percentage = Math.round(s.similarity * 100);
+    return `${emoji}#${s.issueKey.split('#')[1]} (${percentage}% similar): ${s.summary.slice(0, 200)}...`;
+  });
 }
 
 /**
