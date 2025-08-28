@@ -91,7 +91,7 @@ ${JSON.stringify(actionFile, null, 2)}`;
   }
 }
 
-async function getRepositoryMetadata(issueRef: IssueRef): Promise<{ labels: string[]; milestones: string[] }> {
+export async function getRepositoryMetadata(issueRef: IssueRef): Promise<{ labels: string[]; milestones: string[] }> {
   try {
     // Get GitHub auth token
     const { execSync } = await import('child_process');
@@ -100,22 +100,50 @@ async function getRepositoryMetadata(issueRef: IssueRef): Promise<{ labels: stri
     // Create GitHub client
     const octokit = new Octokit({ auth: authToken });
 
-    // Fetch labels and milestones
-    const [labelsResponse, milestonesResponse] = await Promise.all([
-      octokit.issues.listLabelsForRepo({
+    // Fetch all labels with pagination
+    const allLabels = [];
+    let labelsPage = 1;
+    let hasMoreLabels = true;
+
+    while (hasMoreLabels) {
+      const labelsResponse = await octokit.issues.listLabelsForRepo({
         owner: issueRef.owner,
         repo: issueRef.repo,
-      }),
-      octokit.issues.listMilestones({
+        per_page: 100,
+        page: labelsPage,
+      });
+
+      allLabels.push(...labelsResponse.data);
+      
+      // Check if there are more pages
+      hasMoreLabels = labelsResponse.data.length === 100;
+      labelsPage++;
+    }
+
+    // Fetch all milestones with pagination
+    const allMilestones = [];
+    let milestonesPage = 1;
+    let hasMoreMilestones = true;
+
+    while (hasMoreMilestones) {
+      const milestonesResponse = await octokit.issues.listMilestones({
         owner: issueRef.owner,
         repo: issueRef.repo,
         state: 'all',
-      }),
-    ]);
+        per_page: 100,
+        page: milestonesPage,
+      });
+
+      allMilestones.push(...milestonesResponse.data);
+      
+      // Check if there are more pages
+      hasMoreMilestones = milestonesResponse.data.length === 100;
+      milestonesPage++;
+    }
 
     return {
-      labels: labelsResponse.data.map(l => l.name),
-      milestones: milestonesResponse.data.map(m => m.title),
+      labels: allLabels.map(l => l.name),
+      milestones: allMilestones.map(m => m.title),
     };
   } catch (error) {
     // Fallback to empty arrays if API calls fail
