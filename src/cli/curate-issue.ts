@@ -7,6 +7,7 @@ import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueR
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, IssueActionSchema, type IssueRef, type GitHubIssue, type Config, type IssueAction } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
+import { applyInputGates, applyOutputGates, DEFAULT_GATE_CONFIG, type GateConfig } from '../lib/curation-gates.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -60,30 +61,66 @@ async function main() {
     // Get repository metadata for valid labels and milestones
     const { labels, milestones } = await getRepositoryMetadata(issueRef);
 
-    // Get AI recommendations
-    const recommendations = await getCurationRecommendations(ai, issue, issueRef, policyContent, labels, milestones, config);
+    // Apply input gates to categorize and filter the issue
+    const inputResult = applyInputGates(issue, issueRef, DEFAULT_GATE_CONFIG, logger);
+    
+    if (!inputResult.shouldProcess) {
+      logger.info(`Skipping issue: ${inputResult.reasoning}`);
+      return;
+    }
 
-    if (recommendations.length === 0) {
-      logger.info('No curation actions recommended');
+    logger.info(`Issue categorized as: ${inputResult.category} (confidence: ${inputResult.confidence.toFixed(2)}, priority: ${inputResult.priority})`);
+    logger.info(`Reasoning: ${inputResult.reasoning}`);
+
+    // Get recommendations based on category and priority
+    let recommendations: IssueAction[] = [];
+    
+    // Try AI-based recommendations first (if available and needed)
+    if (inputResult.priority === 'high' || inputResult.priority === 'urgent' || inputResult.category === 'needs-info') {
+      try {
+        recommendations = await getCurationRecommendations(ai, issue, issueRef, policyContent, labels, milestones, config);
+        logger.info(`AI generated ${recommendations.length} recommendations`);
+      } catch (error) {
+        logger.warn(`AI recommendations failed: ${error}. Falling back to rule-based approach.`);
+      }
+    }
+
+    // Apply output gates to filter and validate recommendations
+    const outputResult = applyOutputGates(recommendations, issue, issueRef, labels, milestones, logger);
+    
+    // Combine approved AI recommendations with rule-based additional actions
+    const finalActions = [...outputResult.actions, ...outputResult.additional];
+
+    // Log rejected actions
+    if (outputResult.rejected.length > 0) {
+      logger.info(`Rejected ${outputResult.rejected.length} actions:`);
+      for (const rejection of outputResult.rejected) {
+        logger.info(`  - ${rejection.action.kind}: ${rejection.reason}`);
+      }
+    }
+
+    if (finalActions.length === 0) {
+      logger.info('No curation actions recommended after applying gates');
       return;
     }
 
     // Write action file
     const actionFile = {
       issue_ref: issueRef,
-      actions: recommendations,
+      actions: finalActions,
     };
 
     const actionFilePath = `.working/actions/${issueRef.owner.toLowerCase()}.${issueRef.repo.toLowerCase()}.${issueRef.number}.jsonc`;
     ensureDirectoryExists(actionFilePath);
     
     const actionFileContent = `/* Proposed curation actions for ${formatIssueRef(issueRef)}
-   AI-generated recommendations based on POLICY.md and issue analysis */
+   Generated using input/output gates with category: ${inputResult.category} (${inputResult.priority} priority)
+   AI recommendations: ${outputResult.actions.length}, Rule-based: ${outputResult.additional.length} */
 ${JSON.stringify(actionFile, null, 2)}`;
 
     await writeFile(actionFilePath, actionFileContent);
     logger.info(`Action file written to ${actionFilePath}`);
-    logger.info(`Recommended ${recommendations.length} curation actions`);
+    logger.info(`Recommended ${finalActions.length} curation actions (AI: ${outputResult.actions.length}, Rules: ${outputResult.additional.length})`);
 
   } catch (error) {
     logger.error(`Failed to curate issue: ${error}`);
