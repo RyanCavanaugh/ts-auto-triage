@@ -207,3 +207,126 @@ export function calculateCosineSimilarity(a: Float32Array, b: Float32Array): num
   const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
   return magnitude === 0 ? 0 : dotProduct / magnitude;
 }
+
+export interface SimilarIssue {
+  issueKey: string;
+  similarity: number;
+  summary: string;
+}
+
+/**
+ * Find similar issues using embeddings-based similarity search.
+ * Returns issues sorted by similarity score in descending order.
+ */
+export async function findSimilarIssuesUsingEmbeddings(
+  issueTitle: string,
+  issueBody: string,
+  currentIssueRef: IssueRef,
+  ai: { getEmbedding: (text: string, model?: string, context?: string) => Promise<{ embedding: number[] }> },
+  config: { ai: { maxEmbeddingInputLength: number } },
+  maxResults = 5
+): Promise<SimilarIssue[]> {
+  const { readFile, readdir } = await import('fs/promises');
+  const { join } = await import('path');
+
+  try {
+    // Load summaries to get issue descriptions
+    const summariesContent = await readFile('.data/summaries.json', 'utf-8');
+    const summaries = JSON.parse(summariesContent) as Record<string, string[]>;
+
+    // Create embedding for current issue
+    const currentIssueText = `${issueTitle}\n\n${issueBody.slice(0, 2000)}`;
+    const cappedText = currentIssueText.length > config.ai.maxEmbeddingInputLength
+      ? currentIssueText.slice(0, config.ai.maxEmbeddingInputLength - 3) + '...'
+      : currentIssueText;
+    const issueKey = `${currentIssueRef.owner}/${currentIssueRef.repo}#${currentIssueRef.number}`;
+    const currentEmbedding = await ai.getEmbedding(cappedText, undefined, `Get embedding for current issue ${issueKey}`);
+
+    // Calculate similarities by finding and reading all embedding files
+    const similarities: Array<{ issueKey: string; similarity: number; summary: string }> = [];
+
+    // Recursively find all .embeddings.json files in .data directory
+    const embeddingFiles = await findEmbeddingFiles('.data');
+
+    for (const filePath of embeddingFiles) {
+      // Extract issue key from file path: .data/owner/repo/123.embeddings.json -> owner/repo#123
+      const pathParts = filePath.replace(/\\/g, '/').split('/');
+      const filename = pathParts[pathParts.length - 1]!;
+      const repo = pathParts[pathParts.length - 2];
+      const owner = pathParts[pathParts.length - 3];
+
+      const numberStr = filename.replace('.embeddings.json', '');
+      const number = parseInt(numberStr, 10);
+
+      const fileIssueKey = `${owner}/${repo}#${number}`;
+
+      // Skip self
+      const currentIssueKeyStr = `${currentIssueRef.owner.toLowerCase()}/${currentIssueRef.repo.toLowerCase()}#${currentIssueRef.number}`;
+      if (fileIssueKey === currentIssueKeyStr) continue;
+
+      // Read individual embedding file
+      const embeddingContent = await readFile(filePath, 'utf-8');
+      const embeddingList: string[] = JSON.parse(embeddingContent);
+
+      let bestSim = -Infinity;
+      let bestIndex = -1;
+
+      for (let i = 0; i < embeddingList.length; i++) {
+        const base64 = embeddingList[i]!;
+        const embeddingArray = embeddingFromBase64(base64);
+
+        // Use optimized Float32Array similarity calculation
+        const currentEmbeddingFloat32 = new Float32Array(currentEmbedding.embedding);
+        const similarity = calculateCosineSimilarity(currentEmbeddingFloat32, embeddingArray);
+
+        if (similarity > bestSim) {
+          bestSim = similarity;
+          bestIndex = i;
+        }
+      }
+
+      // Use the best similarity for the issue and the corresponding summary (if available)
+      if (bestIndex >= 0) {
+        const summariesForKey = summaries[fileIssueKey];
+        const summary = summariesForKey?.[bestIndex] ?? '';
+        similarities.push({ issueKey: fileIssueKey, similarity: bestSim, summary });
+      }
+    }
+
+    // Sort by similarity and return top results
+    similarities.sort((a, b) => b.similarity - a.similarity);
+    return similarities.slice(0, maxResults);
+  } catch (error) {
+    // If embeddings system is not available, return empty array
+    return [];
+  }
+}
+
+/**
+ * Recursively find all .embeddings.json files in a directory
+ */
+async function findEmbeddingFiles(dir: string): Promise<string[]> {
+  const { readdir } = await import('fs/promises');
+  const { join } = await import('path');
+  const result: string[] = [];
+
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        // Recursively search subdirectories
+        const subFiles = await findEmbeddingFiles(fullPath);
+        result.push(...subFiles);
+      } else if (entry.isFile() && entry.name.endsWith('.embeddings.json')) {
+        result.push(fullPath);
+      }
+    }
+  } catch {
+    // Directory doesn't exist or can't be read
+  }
+
+  return result;
+}
