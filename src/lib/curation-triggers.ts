@@ -2,6 +2,7 @@ import type { GitHubIssue, IssueRef, IssueAction, Config } from './schemas.js';
 import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
 import { loadPrompt } from './prompts.js';
+import { findSimilarIssuesUsingEmbeddings } from './utils.js';
 
 export interface CurationTrigger {
   readonly name: string;
@@ -278,33 +279,63 @@ export class MaintainerResponseTrigger implements CurationTrigger {
     config: Config, 
     logger: Logger
   ): Promise<string | null> {
-    // Simplified duplicate detection - in a real implementation this would use embeddings
-    const messages = [
-      { 
-        role: 'system' as const, 
-        content: await loadPrompt('duplicate-check-system') 
-      },
-      { 
-        role: 'user' as const, 
-        content: await loadPrompt('duplicate-check-user', { 
-          issueTitle: issue.title,
-          issueBody: issue.body ?? ''
-        }) 
-      },
-    ];
+    try {
+      // Use embeddings-based similarity search to find similar issues
+      const similarIssues = await findSimilarIssuesUsingEmbeddings(
+        issue.title,
+        issue.body ?? '',
+        issueRef,
+        ai,
+        config,
+        5 // Get top 5 similar issues
+      );
 
-    const response = await ai.chatCompletion(messages, {
-      maxTokens: 300,
-      context: `Duplicate check for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
-    });
+      if (similarIssues.length === 0) {
+        logger.debug(`${this.name}: No similar issues found using embeddings`);
+        return null;
+      }
 
-    // Simple heuristic - if AI mentions specific issue numbers or suggests duplicates
-    if (response.content.toLowerCase().includes('duplicate') || 
-        response.content.toLowerCase().includes('similar')) {
-      return `## Potential Duplicates Found\n\n${response.content}`;
+      logger.debug(`${this.name}: Found ${similarIssues.length} similar issues using embeddings`);
+
+      // Format similar issues for AI analysis
+      const similarIssuesList = similarIssues.map(s => {
+        const percentage = Math.round(s.similarity * 100);
+        const emoji = s.similarity >= 0.7 ? '🔥 ' : '';
+        return `${emoji}${s.issueKey} (${percentage}% similar): ${s.summary.slice(0, 200)}...`;
+      }).join('\n');
+
+      // Use AI to determine if these are actual duplicates and format response
+      const messages = [
+        { 
+          role: 'system' as const, 
+          content: await loadPrompt('duplicate-check-system') 
+        },
+        { 
+          role: 'user' as const, 
+          content: await loadPrompt('duplicate-check-user', { 
+            issueTitle: issue.title,
+            issueBody: issue.body ?? '',
+            similarIssues: similarIssuesList
+          }) 
+        },
+      ];
+
+      const response = await ai.chatCompletion(messages, {
+        maxTokens: 300,
+        context: `Duplicate check for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
+      });
+
+      // Check if AI confirms these are likely duplicates
+      const content = response.content.toLowerCase();
+      if (content.includes('duplicate') || content.includes('similar') || content.includes('related')) {
+        return `## Potential Duplicates Found\n\n${response.content}\n\n### Similar Issues:\n${similarIssuesList}`;
+      }
+
+      return null;
+    } catch (error) {
+      logger.debug(`${this.name}: Embeddings-based duplicate check failed: ${error}`);
+      return null;
     }
-
-    return null;
   }
 }
 
