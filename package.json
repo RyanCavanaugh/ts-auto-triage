@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "bin": {
     "repro-issue": "dist/cli/repro-issue.js",
+    "static-repro": "dist/cli/static-repro.js",
     "fetch-issues": "dist/cli/fetch-issues.js",
     "fetch-issue": "dist/cli/fetch-issue.js",
     "summarize-issues": "dist/cli/summarize-issues.js",
