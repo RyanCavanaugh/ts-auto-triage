@@ -270,9 +270,8 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
     { role: 'user' as const, content: await loadPrompt('repro-issue-user', { issueNumber: String(issue.number), issueTitle: issue.title, body, recentComments, previousAttemptsText }) },
   ];
  
-  const jsonSchema = zodToJsonSchema(ReproCodeSchema);
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-  const response = await ai.structuredCompletion<ReproCode>(messages, jsonSchema, { 
+  const response = await ai.structuredCompletion(messages, ReproCodeSchema, { 
     maxTokens: 2000,
     context: `Generate reproduction code for ${issueKey}`,
   });
@@ -294,9 +293,8 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
      { role: 'user' as const, content: userPrompt },
    ];
  
-   const jsonSchema = zodToJsonSchema(ReproAnalysisSchema);
    const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-   const response = await ai.structuredCompletion<ReproAnalysis>(messages, jsonSchema, { 
+   const response = await ai.structuredCompletion<ReproAnalysis>(messages, ReproAnalysisSchema, { 
      maxTokens: 500,
      context: `Analyze reproduction attempt for ${issueKey}`,
    });
@@ -317,9 +315,8 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
      { role: 'user' as const, content: userPrompt },
    ];
  
-   const jsonSchema = zodToJsonSchema(FinalAnalysisSchema);
    const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-   const response = await ai.structuredCompletion<FinalAnalysis>(messages, jsonSchema, { 
+   const response = await ai.structuredCompletion<FinalAnalysis>(messages, FinalAnalysisSchema, { 
      maxTokens: 800,
      context: `Generate final analysis for ${issueKey}`,
    });

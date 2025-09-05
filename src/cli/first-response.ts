@@ -129,9 +129,8 @@ async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: str
     { role: 'user' as const, content: userPrompt },
   ];
 
-  const jsonSchema = zodToJsonSchema(FAQResponseSchema);
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-  const response = await ai.structuredCompletion<FAQResponse>(messages, jsonSchema, {
+  const response = await ai.structuredCompletion(messages, FAQResponseSchema, {
     maxTokens: 500,
     context: `Check FAQ matches for ${issueKey}`,
   });

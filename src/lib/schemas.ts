@@ -172,13 +172,14 @@ export type IssueSummaries = z.infer<typeof IssueSummariesSchema>;
 
 // Static Repro Schemas
 export const StaticReproCliSchema = z.object({
-  type: z.literal('cli'),
+  type: z.union([z.literal('cli'), z.literal('ls'), z.literal('unknown')]),
   files: z.array(z.object({
     name: z.string(),
     content: z.string(),
   })),
   args: z.array(z.string()),
   check: z.string(),
+  reasoning: z.string()
 });
 
 export const StaticReproLsSchema = z.object({
@@ -195,11 +196,12 @@ export const StaticReproUnknownSchema = z.object({
   reasoning: z.string(),
 });
 
-export const StaticReproSchema = z.discriminatedUnion('type', [
+export const StaticReproSchema = StaticReproCliSchema;
+/*z.union([
   StaticReproCliSchema,
   StaticReproLsSchema,
   StaticReproUnknownSchema,
-]);
+]);*/
 
 export type StaticReproCli = z.infer<typeof StaticReproCliSchema>;
 export type StaticReproLs = z.infer<typeof StaticReproLsSchema>;

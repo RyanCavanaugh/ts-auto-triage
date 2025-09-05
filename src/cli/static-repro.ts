@@ -90,9 +90,8 @@ async function generateStaticRepro(ai: AIWrapper, issue: GitHubIssue, issueRef: 
     },
   ];
  
-  const jsonSchema = zodToJsonSchema(StaticReproSchema);
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-  const response = await ai.structuredCompletion<StaticRepro>(messages, jsonSchema, { 
+  const response = await ai.structuredCompletion(messages, StaticReproSchema, { 
     maxTokens: 1500,
     context: `Generate static reproduction analysis for ${issueKey}`,
   });

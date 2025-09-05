@@ -3,6 +3,8 @@ import { AzureOpenAI } from 'openai';
 import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity';
 import type { Logger } from './utils.js';
 import { createKVCache } from './kvcache.js';
+import type z from 'zod';
+import { zodResponseFormat } from 'openai/helpers/zod.js';
 
 export interface AIConfig {
   endpoint: string;
@@ -44,7 +46,7 @@ export interface AIWrapper {
 
   structuredCompletion<T>(
     messages: ChatMessage[],
-    jsonSchema: Record<string, unknown>,
+    jsonSchema: z.ZodSchema<T>,
     options?: {
       maxTokens?: number;
       temperature?: number;
@@ -136,7 +138,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
 
     async structuredCompletion<T>(
       messages: ChatMessage[],
-      jsonSchema: Record<string, unknown>,
+      zodSchema: z.ZodSchema<T>,
       options: {
         maxTokens?: number;
         temperature?: number;
@@ -145,7 +147,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       } = {}
     ): Promise<T> {
       const model = options.model ?? config.deployments.chat;
-      const cacheKey = cache ? JSON.stringify({ messages, model, options, jsonSchema }) : null;
+      const cacheKey = cache ? JSON.stringify({ messages, model, options, jsonSchema: zodResponseFormat(zodSchema, "response") }) : null;
       
       // Create human-readable description for cache logging
       const description = options.context ?? `Structured completion with ${model}`;
@@ -166,14 +168,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
           messages: messages,
           max_tokens: options.maxTokens ?? null,
           temperature: options.temperature ?? null,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "response",
-              schema: jsonSchema,
-              strict: true,
-            },
-          },
+          response_format: zodResponseFormat(zodSchema, "response")
         });
 
         const choice = response.choices[0];
@@ -181,12 +176,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
           throw new Error('No content received from Azure OpenAI');
         }
 
-        let result: T;
-        try {
-          result = JSON.parse(choice.message.content) as T;
-        } catch (parseError) {
-          throw new Error(`Failed to parse JSON response: ${parseError}`);
-        }
+        let result: T = zodSchema.parse(JSON.parse(choice.message.content));
 
         if (cache && cacheKey) {
           await cache.memoize(cacheKey, description, async () => result);

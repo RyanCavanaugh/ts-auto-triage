@@ -1,4 +1,4 @@
-Issue #{{issueNumber}}: {{issueTitle}}
+{{issueTitle}}
 
 **Issue Body:**
 {{body}}

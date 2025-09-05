@@ -45,3 +45,4 @@ Guidelines:
 - For LS cases, include /*!*/ markers where language server queries should be made
 - Use modern TypeScript syntax and realistic scenarios
 - Focus on the core issue described, not edge cases
+- Validation steps should be specific and unambiguous. For example, say "No errors reported by tsc", or "An error should be reported about [give details]". Someone should not need access to the original report to understand what to do.
