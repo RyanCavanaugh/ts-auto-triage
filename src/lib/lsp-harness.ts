@@ -68,7 +68,15 @@ export function createLSPHarness(
     async start(workspaceRoot: string): Promise<void> {
       logger.info(`Starting LSP server: ${lspCommand}`);
       
-      lspProcess = spawn(lspCommand, ['--stdio'], {
+      // Parse command and args - support both simple command and full command string
+      const commandParts = lspCommand.trim().split(/\s+/);
+      const command = commandParts[0]!;
+      const args = commandParts.slice(1);
+      
+      // If no args provided, default to --stdio
+      const finalArgs = args.length > 0 ? args : ['--stdio'];
+      
+      lspProcess = spawn(command, finalArgs, {
         cwd: workspaceRoot,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
