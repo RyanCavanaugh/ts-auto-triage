@@ -135,7 +135,7 @@ export type SummariesData = z.infer<typeof SummariesDataSchema>;
 // AI Response Schemas
 export const FAQResponseSchema = z.object({
   has_match: z.boolean(),
-  response: z.string().nullable(), // Only present when has_match is true
+  response: z.string().nullable(), // Can be null when has_match is false
 });
 
 export type FAQResponse = z.infer<typeof FAQResponseSchema>;
