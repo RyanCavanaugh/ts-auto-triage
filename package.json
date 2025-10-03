@@ -14,6 +14,8 @@
     "curate-issue": "dist/cli/curate-issue.js",
     "exec-action": "dist/cli/exec-action.js",
     "first-response": "dist/cli/first-response.js",
+    "list-triggers": "dist/cli/list-triggers.js",
+    "get-repro-steps": "dist/cli/get-repro-steps.js",
     "check-ai": "dist/cli/check-ai.js",
     "twoslash": "dist/cli/twoslash.js"
   },

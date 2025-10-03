@@ -51,5 +51,48 @@ export const lint = task({
     },
 });
 
+// Dev inspection tasks
+export const firstResponse = task({
+    name: "first-response",
+    description: "Run first-response check on an issue",
+    run: async () => {
+        const issueRef = process.argv[3];
+        if (!issueRef) {
+            console.error('Usage: hereby first-response <issue-ref>');
+            console.error('Example: hereby first-response Microsoft/TypeScript#9998');
+            process.exit(1);
+        }
+        await execa("node", ["dist/cli/first-response.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const listTriggers = task({
+    name: "list-triggers",
+    description: "List triggers that would activate for an issue",
+    run: async () => {
+        const issueRef = process.argv[3];
+        if (!issueRef) {
+            console.error('Usage: hereby list-triggers <issue-ref>');
+            console.error('Example: hereby list-triggers Microsoft/TypeScript#9998');
+            process.exit(1);
+        }
+        await execa("node", ["dist/cli/list-triggers.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const getReproSteps = task({
+    name: "get-repro-steps",
+    description: "Generate reproduction steps for an issue",
+    run: async () => {
+        const issueRef = process.argv[3];
+        if (!issueRef) {
+            console.error('Usage: hereby get-repro-steps <issue-ref>');
+            console.error('Example: hereby get-repro-steps Microsoft/TypeScript#9998');
+            process.exit(1);
+        }
+        await execa("node", ["dist/cli/get-repro-steps.js", issueRef], { stdio: "inherit" });
+    },
+});
+
 // Default task - build
 export default build;
