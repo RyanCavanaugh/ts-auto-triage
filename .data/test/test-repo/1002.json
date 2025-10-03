@@ -1,0 +1,19 @@
+{
+  "id": 1002,
+  "number": 1002,
+  "title": "IntelliSense doesn't show imported type in completion list",
+  "body": "When I import a type from another file, IntelliSense doesn't suggest it in the completion list.\n\nSteps to reproduce:\n1. Create file types.ts with export interface MyType { prop: string }\n2. In another file, type const x: My and trigger completions\n3. MyType should appear but doesn't\n\nExpected: MyType should be in the completion list\nActual: MyType is not shown\n\nThis works fine in other editors, seems to be VS Code specific.\n\nTypeScript Version: 5.3.0\nVS Code Version: 1.85.0",
+  "user": {"login": "developer", "id": 3, "type": "User"},
+  "state": "open",
+  "state_reason": null,
+  "labels": [],
+  "milestone": null,
+  "assignees": [],
+  "created_at": "2024-01-03T00:00:00Z",
+  "updated_at": "2024-01-03T00:00:00Z",
+  "closed_at": null,
+  "author_association": "NONE",
+  "reactions": {},
+  "comments": [],
+  "is_pull_request": false
+}

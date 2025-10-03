@@ -28,10 +28,11 @@ This repository implements a comprehensive TypeScript issue management and backl
 2. `fetch-issues`: Bulk issue fetching ✅ **Production Ready**
 3. `exec-action`: Execute GitHub actions ✅ **Production Ready**
 4. `twoslash`: LSP testing harness ✅ **Production Ready**
-5. `repro-issue`: AI-powered issue reproduction ✅ **Complete**
+5. `static-repro`: New repro extraction process ✅ **Production Ready**
 6. `summarize-issues`: AI summaries and embeddings ✅ **Complete**
 7. `curate-issue`: AI-powered issue curation ✅ **Complete**  
 8. `first-response`: FAQ matching and duplicate detection ✅ **Complete**
+9. ~~`repro-issue`~~: Old repro logic (deprecated, use `static-repro` instead)
 
 ## Architecture
 
@@ -59,11 +60,47 @@ This repository implements a comprehensive TypeScript issue management and backl
 - Validation against repository metadata
 
 ### Reproduction System
-- AI-powered analysis of issue reports
-- Automated TypeScript code generation
-- LSP integration for behavior testing
-- Iterative refinement with up to 3 attempts
-- Comprehensive markdown reporting
+
+The new repro extraction process follows a 4-step approach:
+
+#### Step 1: Classification
+Analyzes the issue to determine if it's a **Compiler Bug**, **Language Service Bug**, or **Unknown**.
+
+#### Step 2: Repro Steps Generation
+Creates self-contained reproduction steps based on the bug type:
+- **Compiler Bug**: Generates a `compiler-repro` with file map and command-line args
+- **Language Service Bug**: Generates an `ls-repro` with twoslash format
+
+#### Step 3: Bug Revalidation
+Optionally runs the reproduction and asks AI to determine if the bug is still present.
+
+#### Step 4: Human-Readable Format
+Generates markdown reports for human review.
+
+**Usage:**
+```bash
+# Generate classification and repro steps
+npx static-repro Microsoft/TypeScript#50139
+
+# With validation (runs the repro and checks bug status)
+npx static-repro Microsoft/TypeScript#50139 --validate
+```
+
+**Output Files:**
+- `classification.json` - Bug classification
+- `repro-steps.json` - Reproduction steps
+- `validation.json` - Validation results (if --validate used)
+- `report.md` - Human-readable report
+
+**Test Data:**
+See `.data/test/` for synthetic bug reports you can test with:
+```bash
+npx static-repro test/test-repo#1001  # Compiler bug
+npx static-repro test/test-repo#1002  # Language service bug
+npx static-repro test/test-repo#1003  # Unknown bug
+```
+
+**Note:** The old `repro-issue` command is deprecated. Use `static-repro` instead.
 
 ## Usage Examples
 

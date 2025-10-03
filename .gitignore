@@ -5,6 +5,7 @@ node_modules/
 
 # Data folders
 .data/
+!.data/test/
 .kvcache/
 .working/
 
