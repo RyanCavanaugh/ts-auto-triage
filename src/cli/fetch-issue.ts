@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
-import { Octokit } from '@octokit/rest';
 import { readFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger } from '../lib/utils.js';
-import { createIssueFetcher } from '../lib/issue-fetcher.js';
+import { parseIssueRef, createConsoleLogger, createAuthenticatedIssueFetcher } from '../lib/utils.js';
 import { ConfigSchema } from '../lib/schemas.js';
 
 async function main() {
@@ -29,17 +27,8 @@ async function main() {
     const configContent = await readFile('config.jsonc', 'utf-8');
     const config = ConfigSchema.parse(jsonc.parse(configContent));
 
-    // Get GitHub auth token
-    const { execSync } = await import('child_process');
-    const authToken = execSync('gh auth token', { encoding: 'utf-8' }).trim();
-    
-    // Create GitHub client
-    const octokit = new Octokit({
-      auth: authToken,
-    });
-
     // Create issue fetcher
-    const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
+    const issueFetcher = await createAuthenticatedIssueFetcher(config, logger);
 
     // Fetch the issue
     const issue = await issueFetcher.fetchIssue(issueRef);

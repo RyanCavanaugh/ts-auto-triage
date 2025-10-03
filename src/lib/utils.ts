@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import type { IssueRef } from './schemas.js';
+import type { IssueRef, Config } from './schemas.js';
 
 export function parseIssueRef(input: string): IssueRef {
   // Handle URL format: https://github.com/owner/repo/issues/123
@@ -99,6 +99,26 @@ export function createMockLogger(): Logger {
     warn: () => {},
     debug: () => {},
   };
+}
+
+export async function createAuthenticatedIssueFetcher(
+  config: Config, 
+  logger: Logger
+): Promise<import('./issue-fetcher.js').IssueFetcher> {
+  const { Octokit } = await import('@octokit/rest');
+  const { execSync } = await import('child_process');
+  const { createIssueFetcher } = await import('./issue-fetcher.js');
+  
+  // Get GitHub auth token
+  const authToken = execSync('gh auth token', { encoding: 'utf-8' }).trim();
+  
+  // Create GitHub client
+  const octokit = new Octokit({
+    auth: authToken,
+  });
+
+  // Create issue fetcher
+  return createIssueFetcher(octokit, config, logger, authToken);
 }
 
 import { z } from 'zod';

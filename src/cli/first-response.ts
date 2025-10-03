@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 
-import { Octokit } from '@octokit/rest';
 import { readFile, writeFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity, createAuthenticatedIssueFetcher } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, type IssueRef, type Config } from '../lib/schemas.js';
 import { createFAQMatcher } from '../lib/faq-matcher.js';
-import { createIssueFetcher } from '../lib/issue-fetcher.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -43,17 +41,8 @@ async function main() {
     } catch {
       logger.info(`Issue data not found locally, fetching from GitHub...`);
       
-      // Get GitHub auth token
-      const { execSync } = await import('child_process');
-      const authToken = execSync('gh auth token', { encoding: 'utf-8' }).trim();
-      
-      // Create GitHub client
-      const octokit = new Octokit({
-        auth: authToken,
-      });
-
       // Create issue fetcher and fetch the issue
-      const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
+      const issueFetcher = await createAuthenticatedIssueFetcher(config, logger);
       issue = await issueFetcher.fetchIssue(issueRef);
       
       logger.info(`Successfully fetched issue from GitHub`);
