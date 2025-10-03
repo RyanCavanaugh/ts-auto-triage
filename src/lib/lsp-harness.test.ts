@@ -20,10 +20,18 @@ describe('LSP Harness', () => {
       expect(typeof harness.getCompletions).toBe('function');
     });
 
-    it('should throw error when sending message without started process', async () => {
+    it('should throw error when opening document without started process', async () => {
       const harness = createLSPHarness('typescript-language-server', logger);
       
       await expect(harness.openDocument('/test/file.ts', 'const x = 1;'))
+        .rejects
+        .toThrow('LSP process not available');
+    });
+
+    it('should throw error when closing document without started process', async () => {
+      const harness = createLSPHarness('typescript-language-server', logger);
+      
+      await expect(harness.closeDocument('/test/file.ts'))
         .rejects
         .toThrow('LSP process not available');
     });
