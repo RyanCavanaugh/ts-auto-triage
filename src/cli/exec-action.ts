@@ -2,7 +2,7 @@
 
 import { readFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, createActionFilePath, getGitHubAuthToken, createAuthenticatedOctokit } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, createActionFilePath, createAuthenticatedOctokit } from '../lib/utils.js';
 import { ActionFileSchema, ConfigSchema } from '../lib/schemas.js';
 
 async function main() {
@@ -47,8 +47,7 @@ async function main() {
     }
 
     // Create authenticated Octokit client
-    const authToken = getGitHubAuthToken();
-    const octokit = await createAuthenticatedOctokit(authToken);
+    const octokit = await createAuthenticatedOctokit();
 
     // Get current issue state to check for idempotency
     const currentIssue = await octokit.rest.issues.get({

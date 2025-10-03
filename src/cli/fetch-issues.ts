@@ -34,7 +34,7 @@ async function main() {
 
     // Create authenticated Octokit client and issue fetcher
     const authToken = getGitHubAuthToken();
-    const octokit = await createAuthenticatedOctokit(authToken);
+    const octokit = await createAuthenticatedOctokit();
     const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
 
     // Fetch all issues

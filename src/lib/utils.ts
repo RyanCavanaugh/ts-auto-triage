@@ -106,12 +106,15 @@ export function getGitHubAuthToken(): string {
   return execSync('gh auth token', { encoding: 'utf-8' }).trim();
 }
 
-export async function createAuthenticatedOctokit(authToken: string): Promise<import('@octokit/rest').Octokit> {
+export async function createAuthenticatedOctokit(authToken?: string): Promise<import('@octokit/rest').Octokit> {
   const { Octokit } = await import('@octokit/rest');
+  
+  // Get auth token if not provided
+  const token = authToken ?? getGitHubAuthToken();
   
   // Create GitHub client
   const octokit = new Octokit({
-    auth: authToken,
+    auth: token,
   });
 
   return octokit;
