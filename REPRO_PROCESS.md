@@ -66,7 +66,7 @@ Output: `CompilerReproSteps`
 **Key Requirements**:
 - `fileMap`: Contains all files needed (including tsconfig.json if needed)
 - `cmdLineArgs`: Command-line arguments for tsc
-- `instructions`: Must start with "The bug is fixed if" or "The bug still exists if"
+- `instructions`: **Must start with "The bug is fixed if" or "The bug still exists if"** (see note below)
 
 #### For Language Service Bugs
 
@@ -85,7 +85,9 @@ Output: `LSReproSteps`
 
 **Key Requirements**:
 - `twoslash`: Twoslash format with query markers (`/**/`, `^?`, etc.)
-- `instructions`: Must start with "The bug is fixed if" or "The bug still exists if"
+- `instructions`: **Must start with "The bug is fixed if" or "The bug still exists if"** (see note below)
+
+> **Important Note on Instructions**: Both compiler and LS repro steps require instructions that start with one of these two phrases. This convention ensures the AI in Step 3 (validation) can clearly determine whether the bug is present or not. The phrasing should be unambiguous - someone reading just the instructions and output should know if the bug exists without seeing the original issue.
 
 ### Step 3: Bug Revalidation (Optional)
 
@@ -170,12 +172,14 @@ See `.data/test/README.md` for information about the synthetic test issues.
 
 ## Schema Definitions
 
-All schemas are defined in `src/lib/schemas.ts`:
+All new schemas are defined in `src/lib/schemas.ts`:
 - `BugClassificationSchema`
 - `CompilerReproStepsSchema`
 - `LSReproStepsSchema`
 - `ReproStepsSchema` (discriminated union)
 - `BugRevalidationSchema`
+
+**Note**: The same file also contains legacy schemas (StaticReproCliSchema, StaticReproLsSchema, StaticReproUnknownSchema) which are deprecated but kept for backwards compatibility.
 
 ## Library Structure
 
