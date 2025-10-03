@@ -51,19 +51,23 @@ export const lint = task({
     },
 });
 
+// Helper function to extract issue reference from --issue parameter
+function getIssueRefFromArgs(taskName) {
+    const issueArg = process.argv.find(arg => arg.startsWith('--issue='));
+    if (!issueArg) {
+        console.error(`Usage: hereby ${taskName} --issue=<issue-ref>`);
+        console.error(`Example: hereby ${taskName} --issue=Microsoft/TypeScript#9998`);
+        process.exit(1);
+    }
+    return issueArg.substring('--issue='.length);
+}
+
 // Dev inspection tasks
 export const firstResponse = task({
     name: "first-response",
     description: "Run first-response check on an issue (use --issue=owner/repo#number)",
     run: async () => {
-        // Parse --issue parameter
-        const issueArg = process.argv.find(arg => arg.startsWith('--issue='));
-        if (!issueArg) {
-            console.error('Usage: hereby first-response --issue=<issue-ref>');
-            console.error('Example: hereby first-response --issue=Microsoft/TypeScript#9998');
-            process.exit(1);
-        }
-        const issueRef = issueArg.substring('--issue='.length);
+        const issueRef = getIssueRefFromArgs('first-response');
         await execa("node", ["dist/cli/first-response.js", issueRef], { stdio: "inherit" });
     },
 });
@@ -72,14 +76,7 @@ export const listTriggers = task({
     name: "list-triggers",
     description: "List triggers that would activate for an issue (use --issue=owner/repo#number)",
     run: async () => {
-        // Parse --issue parameter
-        const issueArg = process.argv.find(arg => arg.startsWith('--issue='));
-        if (!issueArg) {
-            console.error('Usage: hereby list-triggers --issue=<issue-ref>');
-            console.error('Example: hereby list-triggers --issue=Microsoft/TypeScript#9998');
-            process.exit(1);
-        }
-        const issueRef = issueArg.substring('--issue='.length);
+        const issueRef = getIssueRefFromArgs('list-triggers');
         await execa("node", ["dist/cli/list-triggers.js", issueRef], { stdio: "inherit" });
     },
 });
@@ -88,14 +85,7 @@ export const getReproSteps = task({
     name: "get-repro-steps",
     description: "Generate reproduction steps for an issue (use --issue=owner/repo#number)",
     run: async () => {
-        // Parse --issue parameter
-        const issueArg = process.argv.find(arg => arg.startsWith('--issue='));
-        if (!issueArg) {
-            console.error('Usage: hereby get-repro-steps --issue=<issue-ref>');
-            console.error('Example: hereby get-repro-steps --issue=Microsoft/TypeScript#9998');
-            process.exit(1);
-        }
-        const issueRef = issueArg.substring('--issue='.length);
+        const issueRef = getIssueRefFromArgs('get-repro-steps');
         await execa("node", ["dist/cli/get-repro-steps.js", issueRef], { stdio: "inherit" });
     },
 });
