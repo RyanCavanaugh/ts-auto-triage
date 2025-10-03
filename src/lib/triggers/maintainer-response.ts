@@ -4,7 +4,7 @@ import type { Logger } from '../utils.js';
 import { loadPrompt } from '../prompts.js';
 import { findSimilarIssuesUsingEmbeddings } from '../utils.js';
 import { createFAQMatcher } from '../faq-matcher.js';
-import type { CurationTrigger, RepositoryMetadata } from './index.js';
+import type { CurationTrigger, RepositoryMetadata } from './types.js';
 
 /**
  * Trigger that provides FAQ responses and duplicate detection for issues without maintainer response

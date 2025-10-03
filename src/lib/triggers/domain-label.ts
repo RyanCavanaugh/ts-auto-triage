@@ -2,7 +2,7 @@ import type { GitHubIssue, IssueRef, IssueAction, Config } from '../schemas.js';
 import type { AIWrapper } from '../ai-wrapper.js';
 import type { Logger } from '../utils.js';
 import { loadPrompt } from '../prompts.js';
-import type { CurationTrigger, RepositoryMetadata } from './index.js';
+import type { CurationTrigger, RepositoryMetadata } from './types.js';
 
 /**
  * Trigger that adds a domain label if an open issue lacks one
