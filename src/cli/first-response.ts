@@ -5,8 +5,8 @@ import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, FAQResponseSchema, type IssueRef, type FAQResponse, type Config } from '../lib/schemas.js';
-import { loadPrompt } from '../lib/prompts.js';
+import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, type IssueRef, type Config } from '../lib/schemas.js';
+import { createFAQMatcher } from '../lib/faq-matcher.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -52,11 +52,13 @@ async function main() {
 
     logger.info(`Analyzing issue: ${issue.title}`);
 
+    // Create FAQ matcher
+    const faqMatcher = createFAQMatcher(ai, logger);
+
     // Check FAQ entries
     let faqResponse: string | null = null;
     try {
-      const faqContent = await readFile('FAQ.md', 'utf-8');
-      faqResponse = await checkFAQMatches(ai, issueBody, issue.title, faqContent, issueRef);
+      faqResponse = await faqMatcher.checkFAQMatch(issue.title, issueBody, issueRef);
     } catch {
       logger.debug('No FAQ.md file found, skipping FAQ check');
     }
@@ -114,28 +116,6 @@ ${JSON.stringify(actionFile, null, 2)}`;
     logger.error(`Failed to check first response: ${error}`);
     process.exit(1);
   }
-}
-
-async function checkFAQMatches(ai: AIWrapper, issueBody: string, issueTitle: string, faqContent: string, issueRef: IssueRef): Promise<string | null> {
-  const systemPrompt = await loadPrompt('first-response-system');
-  const userPrompt = await loadPrompt('first-response-user', {
-    issueTitle,
-    issueBody: issueBody.slice(0, 4000),
-    faqContent,
-  });
-
-  const messages = [
-    { role: 'system' as const, content: systemPrompt },
-    { role: 'user' as const, content: userPrompt },
-  ];
-
-  const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-  const response = await ai.structuredCompletion(messages, FAQResponseSchema, {
-    maxTokens: 500,
-    context: `Check FAQ matches for ${issueKey}`,
-  });
-
-  return response.has_match ? response.response ?? null : null;
 }
 
 async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef, config: Config): Promise<string[]> {

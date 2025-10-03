@@ -3,6 +3,7 @@ import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
 import { loadPrompt } from './prompts.js';
 import { findSimilarIssuesUsingEmbeddings } from './utils.js';
+import { createFAQMatcher } from './faq-matcher.js';
 
 export interface CurationTrigger {
   readonly name: string;
@@ -191,7 +192,8 @@ export class MaintainerResponseTrigger implements CurationTrigger {
 
     // Check for FAQ matches
     try {
-      const faqResponse = await this.checkFAQMatches(issue, ai, logger);
+      const faqMatcher = createFAQMatcher(ai, logger);
+      const faqResponse = await faqMatcher.checkFAQMatch(issue.title, issue.body ?? '', issueRef);
       if (faqResponse) {
         actions.push({
           kind: 'add_comment',
@@ -232,44 +234,6 @@ export class MaintainerResponseTrigger implements CurationTrigger {
   private getDefaultMaintainerPatterns(): string[] {
     // Default patterns for common maintainer usernames - could be made configurable
     return ['maintainer', 'admin', 'owner'];
-  }
-
-  private async checkFAQMatches(issue: GitHubIssue, ai: AIWrapper, logger: Logger): Promise<string | null> {
-    try {
-      // Try to load FAQ content
-      const { readFile } = await import('fs/promises');
-      const faqContent = await readFile('FAQ.md', 'utf-8');
-
-      const messages = [
-        { 
-          role: 'system' as const, 
-          content: await loadPrompt('faq-match-system') 
-        },
-        { 
-          role: 'user' as const, 
-          content: await loadPrompt('faq-match-user', { 
-            issueTitle: issue.title,
-            issueBody: issue.body ?? '',
-            faqContent 
-          }) 
-        },
-      ];
-
-      const response = await ai.chatCompletion(messages, {
-        maxTokens: 500,
-        context: `FAQ check for issue #${issue.number}`,
-      });
-
-      // Simple check if response indicates a match
-      if (response.content.toLowerCase().includes('relevant') || 
-          response.content.toLowerCase().includes('faq')) {
-        return response.content;
-      }
-    } catch (error) {
-      logger.debug(`FAQ file not found or error reading: ${error}`);
-    }
-
-    return null;
   }
 
   private async checkForDuplicates(
