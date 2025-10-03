@@ -18,11 +18,11 @@
     "twoslash": "dist/cli/twoslash.js"
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
-    "lint": "eslint src/**/*.ts",
-    "clean": "rm -rf dist"
+    "build": "hereby build",
+    "dev": "hereby dev",
+    "test": "hereby test",
+    "lint": "hereby lint",
+    "clean": "hereby clean"
   },
   "keywords": [
     "typescript",
@@ -39,6 +39,8 @@
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.0.0",
+    "execa": "^9.6.0",
+    "hereby": "^1.11.0",
     "jest": "^29.0.0",
     "ts-jest": "^29.0.0",
     "typescript": "^5.9.0"
