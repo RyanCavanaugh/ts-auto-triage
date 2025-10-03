@@ -2,10 +2,11 @@ import { createLSPHarness } from './lsp-harness.js';
 import { createMockLogger } from './utils.js';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('LSP Harness', () => {
   const logger = createMockLogger();
-  const testWorkspaceDir = '/tmp/lsp-test-workspace';
+  const testWorkspaceDir = join(tmpdir(), 'lsp-test-workspace');
   let harness: ReturnType<typeof createLSPHarness>;
 
   beforeAll(async () => {
@@ -47,8 +48,11 @@ describe('LSP Harness', () => {
       const filePath = join(testWorkspaceDir, 'test.ts');
       const content = 'const x: number = 42;';
 
-      await expect(harness.openDocument(filePath, content)).resolves.not.toThrow();
-      await expect(harness.closeDocument(filePath)).resolves.not.toThrow();
+      await harness.openDocument(filePath, content);
+      await harness.closeDocument(filePath);
+      
+      // Test passes if no exceptions are thrown
+      expect(true).toBe(true);
     });
   });
 
@@ -207,10 +211,10 @@ console.log(userName.toUpperCase());`;
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       try {
-        // Test completions on user object
+        // Test completions on user parameter in getUserName function
         const completions = await harness.getCompletions(filePath, {
           line: 7,
-          character: 15, // After "user."
+          character: 14, // After "user." in "return user.name;"
         });
 
         const labels = completions.map(c => c.label);
