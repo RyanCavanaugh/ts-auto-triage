@@ -3,10 +3,11 @@
 import { readFile, writeFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity, getGitHubAuthToken, createAuthenticatedOctokit } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, type IssueRef, type Config } from '../lib/schemas.js';
 import { createFAQMatcher } from '../lib/faq-matcher.js';
+import { createIssueFetcher } from '../lib/issue-fetcher.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -32,15 +33,22 @@ async function main() {
     // Create AI wrapper
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
 
-    // Load the issue data
+    // Load the issue data - fetch if not available locally
     const issueFilePath = `.data/${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}/${issueRef.number}.json`;
     let issue;
     try {
       const issueContent = await readFile(issueFilePath, 'utf-8');
       issue = GitHubIssueSchema.parse(JSON.parse(issueContent));
     } catch {
-      logger.error(`Issue data not found at ${issueFilePath}. Run fetch-issue first.`);
-      process.exit(1);
+      logger.info(`Issue data not found locally, fetching from GitHub...`);
+      
+      // Create authenticated Octokit client and issue fetcher
+      const authToken = getGitHubAuthToken();
+      const octokit = await createAuthenticatedOctokit();
+      const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
+      issue = await issueFetcher.fetchIssue(issueRef);
+      
+      logger.info(`Successfully fetched issue from GitHub`);
     }
 
     // Only process issue body, not comments (as per spec)
