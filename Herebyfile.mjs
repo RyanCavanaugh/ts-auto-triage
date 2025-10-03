@@ -35,7 +35,10 @@ export const test = task({
     name: "test",
     description: "Run Jest tests",
     run: async () => {
-        await execa("node", ["--experimental-vm-modules", "node_modules/jest/bin/jest.js"], { stdio: "inherit" });
+        await execa("npx", ["jest"], { 
+            stdio: "inherit",
+            env: { ...process.env, NODE_OPTIONS: "--experimental-vm-modules" }
+        });
     },
 });
 
