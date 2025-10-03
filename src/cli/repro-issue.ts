@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 
+// DEPRECATED: This file contains the old repro extraction logic.
+// Use static-repro.ts instead, which implements the new 4-step process:
+// 1. Classification (Compiler/LS/Unknown)
+// 2. Repro Steps Generation
+// 3. Bug Revalidation
+// 4. Human-Readable Format
+//
+// This file is kept for reference but should not be used for new work.
+
 import { readFile, writeFile, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { execSync } from 'child_process';
