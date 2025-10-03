@@ -2,6 +2,7 @@ import type { GitHubIssue, IssueRef, IssueAction, Config } from './schemas.js';
 import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
 import type { RepositoryMetadata } from './triggers/index.js';
+import { getAllTriggers } from './triggers/index.js';
 
 // Re-export everything from triggers
 export type { CurationTrigger, RepositoryMetadata } from './triggers/index.js';
@@ -18,7 +19,6 @@ export async function executeTriggers(
   config: Config,
   logger: Logger
 ): Promise<IssueAction[]> {
-  const { getAllTriggers } = await import('./triggers/index.js');
   const triggers = getAllTriggers();
   const allActions: IssueAction[] = [];
 
