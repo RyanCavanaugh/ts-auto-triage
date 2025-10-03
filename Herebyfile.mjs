@@ -51,5 +51,47 @@ export const lint = task({
     },
 });
 
+// Helper function to extract issue reference from command line arguments
+function getIssueRefFromArgs(taskName) {
+    // Look for argument after -- separator
+    const separatorIndex = process.argv.indexOf('--');
+    if (separatorIndex >= 0 && separatorIndex < process.argv.length - 1) {
+        return process.argv[separatorIndex + 1];
+    }
+    
+    // Fallback: show usage
+    console.error(`Usage: hereby ${taskName} -- <issue-ref>`);
+    console.error(`Example: hereby ${taskName} -- Microsoft/TypeScript#9998`);
+    process.exit(1);
+}
+
+// Dev inspection tasks
+export const firstResponse = task({
+    name: "first-response",
+    description: "Run first-response check on an issue",
+    run: async () => {
+        const issueRef = getIssueRefFromArgs('first-response');
+        await execa("node", ["dist/cli/first-response.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const listTriggers = task({
+    name: "list-triggers",
+    description: "List triggers that would activate for an issue",
+    run: async () => {
+        const issueRef = getIssueRefFromArgs('list-triggers');
+        await execa("node", ["dist/cli/list-triggers.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const getReproSteps = task({
+    name: "get-repro-steps",
+    description: "Generate reproduction steps for an issue",
+    run: async () => {
+        const issueRef = getIssueRefFromArgs('get-repro-steps');
+        await execa("node", ["dist/cli/get-repro-steps.js", issueRef], { stdio: "inherit" });
+    },
+});
+
 // Default task - build
 export default build;
