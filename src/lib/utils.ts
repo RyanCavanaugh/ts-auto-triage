@@ -101,13 +101,9 @@ export function createMockLogger(): Logger {
   };
 }
 
-export async function createAuthenticatedIssueFetcher(
-  config: Config, 
-  logger: Logger
-): Promise<import('./issue-fetcher.js').IssueFetcher> {
+export async function createAuthenticatedOctokit(): Promise<{ octokit: import('@octokit/rest').Octokit; authToken: string }> {
   const { Octokit } = await import('@octokit/rest');
   const { execSync } = await import('child_process');
-  const { createIssueFetcher } = await import('./issue-fetcher.js');
   
   // Get GitHub auth token
   const authToken = execSync('gh auth token', { encoding: 'utf-8' }).trim();
@@ -117,8 +113,7 @@ export async function createAuthenticatedIssueFetcher(
     auth: authToken,
   });
 
-  // Create issue fetcher
-  return createIssueFetcher(octokit, config, logger, authToken);
+  return { octokit, authToken };
 }
 
 import { z } from 'zod';

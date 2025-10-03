@@ -2,7 +2,8 @@
 
 import { readFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
-import { createConsoleLogger, createAuthenticatedIssueFetcher } from '../lib/utils.js';
+import { createConsoleLogger, createAuthenticatedOctokit } from '../lib/utils.js';
+import { createIssueFetcher } from '../lib/issue-fetcher.js';
 import { ConfigSchema } from '../lib/schemas.js';
 
 async function main() {
@@ -31,8 +32,9 @@ async function main() {
     const configContent = await readFile('config.jsonc', 'utf-8');
     const config = ConfigSchema.parse(jsonc.parse(configContent));
 
-    // Create issue fetcher
-    const issueFetcher = await createAuthenticatedIssueFetcher(config, logger);
+    // Create authenticated Octokit client and issue fetcher
+    const { octokit, authToken } = await createAuthenticatedOctokit();
+    const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
 
     // Fetch all issues
     await issueFetcher.fetchAllIssues(owner, repo);

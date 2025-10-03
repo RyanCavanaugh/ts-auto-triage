@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
-import { Octokit } from '@octokit/rest';
 import { readFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, createActionFilePath } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, createActionFilePath, createAuthenticatedOctokit } from '../lib/utils.js';
 import { ActionFileSchema, ConfigSchema } from '../lib/schemas.js';
 
 async function main() {
@@ -47,14 +46,8 @@ async function main() {
       return;
     }
 
-    // Get GitHub auth token
-    const { execSync } = await import('child_process');
-    const authToken = execSync('gh auth token', { encoding: 'utf-8' }).trim();
-    
-    // Create GitHub client
-    const octokit = new Octokit({
-      auth: authToken,
-    });
+    // Create authenticated Octokit client
+    const { octokit } = await createAuthenticatedOctokit();
 
     // Get current issue state to check for idempotency
     const currentIssue = await octokit.rest.issues.get({

@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile } from 'fs/promises';
-import { Octokit } from '@octokit/rest';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, createAuthenticatedOctokit } from '../lib/utils.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, type IssueRef, type GitHubIssue, type Config } from '../lib/schemas.js';
 import { executeTriggers, type RepositoryMetadata } from '../lib/curation-triggers.js';
@@ -80,12 +79,8 @@ ${JSON.stringify(actionFile, null, 2)}`;
 
 export async function getRepositoryMetadata(issueRef: IssueRef): Promise<{ labels: string[]; milestones: string[] }> {
   try {
-    // Get GitHub auth token
-    const { execSync } = await import('child_process');
-    const authToken = execSync('gh auth token', { encoding: 'utf-8' }).trim();
-    
-    // Create GitHub client
-    const octokit = new Octokit({ auth: authToken });
+    // Create authenticated Octokit client
+    const { octokit } = await createAuthenticatedOctokit();
 
     // Fetch all labels with pagination
     const allLabels = [];
