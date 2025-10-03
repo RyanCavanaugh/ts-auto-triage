@@ -4,7 +4,7 @@ This document describes the hereby tasks available for inspecting and analyzing 
 
 ## Tasks
 
-### `hereby first-response --issue=<issue-ref>`
+### `hereby first-response -- <issue-ref>`
 
 Performs an automated first response check on a new issue, checking for:
 - FAQ matches
@@ -12,16 +12,16 @@ Performs an automated first response check on a new issue, checking for:
 
 **Example:**
 ```bash
-hereby first-response --issue=Microsoft/TypeScript#9998
+hereby first-response -- Microsoft/TypeScript#9998
 ```
 
-### `hereby list-triggers --issue=<issue-ref>`
+### `hereby list-triggers -- <issue-ref>`
 
 Lists all curation triggers and shows which ones would activate for the given issue.
 
 **Example:**
 ```bash
-hereby list-triggers --issue=Microsoft/TypeScript#9998
+hereby list-triggers -- Microsoft/TypeScript#9998
 ```
 
 **Output:**
@@ -30,7 +30,7 @@ hereby list-triggers --issue=Microsoft/TypeScript#9998
 - Displays trigger descriptions
 - Shows total count of active/inactive triggers
 
-### `hereby get-repro-steps --issue=<issue-ref>`
+### `hereby get-repro-steps -- <issue-ref>`
 
 Generates reproduction steps for an issue using AI analysis. This performs:
 1. Bug classification (compiler/language-service/unknown)
@@ -39,7 +39,7 @@ Generates reproduction steps for an issue using AI analysis. This performs:
 
 **Example:**
 ```bash
-hereby get-repro-steps --issue=Microsoft/TypeScript#9998
+hereby get-repro-steps -- Microsoft/TypeScript#9998
 ```
 
 **Output Files:**
@@ -56,4 +56,4 @@ Before using these tasks, you need to:
 
 ## Note on Syntax
 
-The tasks use the `--issue=` parameter format because hereby's argument parsing treats positional arguments as additional tasks to run. The `--issue=` format allows passing the issue reference as a parameter instead.
+The tasks require the `--` separator before the issue reference (e.g., `hereby list-triggers -- owner/repo#123`). This is necessary because hereby's argument parser treats any non-option arguments as additional task names to run. The `--` tells hereby to stop parsing for task names and pass the remaining arguments to the task itself.
