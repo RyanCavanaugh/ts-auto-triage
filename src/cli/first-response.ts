@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { Octokit } from '@octokit/rest';
 import { readFile, writeFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
@@ -7,6 +8,7 @@ import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueR
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, type IssueRef, type Config } from '../lib/schemas.js';
 import { createFAQMatcher } from '../lib/faq-matcher.js';
+import { createIssueFetcher } from '../lib/issue-fetcher.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -32,15 +34,29 @@ async function main() {
     // Create AI wrapper
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
 
-    // Load the issue data
+    // Load the issue data - fetch if not available locally
     const issueFilePath = `.data/${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}/${issueRef.number}.json`;
     let issue;
     try {
       const issueContent = await readFile(issueFilePath, 'utf-8');
       issue = GitHubIssueSchema.parse(JSON.parse(issueContent));
     } catch {
-      logger.error(`Issue data not found at ${issueFilePath}. Run fetch-issue first.`);
-      process.exit(1);
+      logger.info(`Issue data not found locally, fetching from GitHub...`);
+      
+      // Get GitHub auth token
+      const { execSync } = await import('child_process');
+      const authToken = execSync('gh auth token', { encoding: 'utf-8' }).trim();
+      
+      // Create GitHub client
+      const octokit = new Octokit({
+        auth: authToken,
+      });
+
+      // Create issue fetcher and fetch the issue
+      const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
+      issue = await issueFetcher.fetchIssue(issueRef);
+      
+      logger.info(`Successfully fetched issue from GitHub`);
     }
 
     // Only process issue body, not comments (as per spec)
