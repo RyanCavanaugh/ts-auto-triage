@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { execSync } from 'child_process';
 import type { IssueRef, Config } from './schemas.js';
 
 export function parseIssueRef(input: string): IssueRef {
@@ -102,7 +103,6 @@ export function createMockLogger(): Logger {
 }
 
 export function getGitHubAuthToken(): string {
-  const { execSync } = require('child_process');
   return execSync('gh auth token', { encoding: 'utf-8' }).trim();
 }
 
