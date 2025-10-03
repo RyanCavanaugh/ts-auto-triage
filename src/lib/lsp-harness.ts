@@ -70,7 +70,10 @@ export function createLSPHarness(
       
       // Parse command and args - support both simple command and full command string
       const commandParts = lspCommand.trim().split(/\s+/);
-      const command = commandParts[0]!;
+      if (commandParts.length === 0 || !commandParts[0]) {
+        throw new Error('Invalid LSP command: command string is empty');
+      }
+      const command = commandParts[0];
       const args = commandParts.slice(1);
       
       // If no args provided, default to --stdio

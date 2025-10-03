@@ -4,10 +4,6 @@ import { createMockLogger } from './utils.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 describe('LSP Harness Integration with @typescript/native-preview', () => {
   let tempDir: string;
@@ -51,8 +47,8 @@ const invalid: number = "string";
     await fs.writeFile(tsconfigPath, tsconfigContent);
 
     // Initialize LSP harness with @typescript/native-preview
-    // Use the tsgo binary from node_modules/.bin with absolute path
-    const tsgoPath = path.resolve(path.join(__dirname, '../../node_modules/.bin/tsgo'));
+    // Find the tsgo binary installed in node_modules
+    const tsgoPath = path.join(process.cwd(), 'node_modules', '.bin', 'tsgo');
     lspHarness = createLSPHarness(`${tsgoPath} --lsp --stdio`, logger);
     await lspHarness.start(tempDir);
   }, 30000); // 30 second timeout for beforeAll
