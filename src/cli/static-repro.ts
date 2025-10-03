@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'fs/promises';
+import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, type Logger } from '../lib/utils.js';
-import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, StaticReproSchema, type GitHubIssue, type Config, type StaticRepro, type IssueRef } from '../lib/schemas.js';
-import { loadPrompt } from '../lib/prompts.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, type Logger } from '../lib/utils.js';
+import { createAIWrapper } from '../lib/ai-wrapper.js';
+import { createLSPHarness } from '../lib/lsp-harness.js';
+import { ConfigSchema, GitHubIssueSchema, type GitHubIssue, type Config, type IssueRef } from '../lib/schemas.js';
+import { createReproExtractor } from '../lib/repro-extractor.js';
+import { createReproValidator } from '../lib/repro-validator.js';
+import { createReproFormatter } from '../lib/repro-formatter.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -13,17 +17,23 @@ async function main() {
   try {
     // Parse command line arguments
     const args = process.argv.slice(2);
-    if (args.length !== 1) {
-      console.error('Usage: static-repro <issue-ref>');
+    const validateFlag = args.includes('--validate');
+    const issueRefInput = args.find(arg => !arg.startsWith('--'));
+
+    if (!issueRefInput) {
+      console.error('Usage: static-repro <issue-ref> [--validate]');
       console.error('Example: static-repro Microsoft/TypeScript#9998');
-      console.error('Example: static-repro https://github.com/Microsoft/TypeScript/issues/9998');
+      console.error('Example: static-repro Microsoft/TypeScript#9998 --validate');
+      console.error('');
+      console.error('Options:');
+      console.error('  --validate    Run the reproduction steps and validate the bug status');
       process.exit(1);
     }
 
-    const issueRefInput = args[0]!;
     const issueRef = parseIssueRef(issueRefInput);
+    const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
     
-    logger.info(`Analyzing issue for static reproduction: ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`);
+    logger.info(`Analyzing issue for reproduction: ${issueKey}`);
 
     // Load configuration
     const configContent = await readFile('config.jsonc', 'utf-8');
@@ -45,58 +55,99 @@ async function main() {
 
     logger.info(`Analyzing: ${issue.title}`);
 
-    // Generate static reproduction analysis
-    const staticRepro = await generateStaticRepro(ai, issue, issueRef, config, logger);
+    // Step 1: Classify the bug
+    const extractor = createReproExtractor(ai, {
+      maxIssueBodyLength: config.github.maxIssueBodyLength,
+      maxCommentLength: config.github.maxCommentLength,
+    }, logger);
 
-    // Save results
-    const outputPath = `.working/outputs/${issueRef.owner}-${issueRef.repo}-${issueRef.number}-static-repro.json`;
-    ensureDirectoryExists(outputPath);
-    await writeFile(outputPath, JSON.stringify(staticRepro, null, 2));
+    const classification = await extractor.classifyBug(issue, issueKey);
+    logger.info(`Bug type: ${classification.bugType}`);
+    logger.info(`Reasoning: ${classification.reasoning}`);
 
-    logger.info(`Static reproduction type: ${staticRepro.type}`);
-    if (staticRepro.type === 'unknown') {
-      logger.info(`Reasoning: ${staticRepro.reasoning}`);
-    } else {
-      logger.info(`Files: ${staticRepro.files.length}`);
-      if (staticRepro.type === 'cli') {
-        logger.info(`Args: ${staticRepro.args.join(' ')}`);
+    // Step 2: Generate reproduction steps
+    const reproSteps = await extractor.generateReproSteps(issue, classification, issueKey);
+    
+    if (!reproSteps) {
+      logger.info('No reproduction steps generated (unknown bug type)');
+      
+      // Save classification only
+      const outputDir = `.working/outputs/${issueRef.owner}-${issueRef.repo}-${issueRef.number}`;
+      ensureDirectoryExists(join(outputDir, 'dummy'));
+      
+      const classificationPath = join(outputDir, 'classification.json');
+      await writeFile(classificationPath, JSON.stringify(classification, null, 2));
+      
+      const formatter = createReproFormatter();
+      const markdownPath = join(outputDir, 'report.md');
+      await writeFile(markdownPath, formatter.formatFullReport(classification, null, null));
+      
+      logger.info(`Results saved to ${outputDir}`);
+      return;
+    }
+
+    logger.info(`Generated ${reproSteps.type} reproduction steps`);
+
+    // Step 3: Optionally validate the reproduction
+    let validation = null;
+    if (validateFlag) {
+      logger.info('Running validation...');
+      
+      const workspaceDir = `.working/repro-workspace-${issueRef.owner}-${issueRef.repo}-${issueRef.number}`;
+      
+      // Clean and create workspace
+      try {
+        await rm(workspaceDir, { recursive: true, force: true });
+      } catch {
+        // Ignore errors
+      }
+      await mkdir(workspaceDir, { recursive: true });
+
+      const lspHarness = createLSPHarness(config.typescript.lspEntryPoint, logger);
+      const validator = createReproValidator(ai, lspHarness, logger);
+      
+      try {
+        await lspHarness.start(workspaceDir);
+        validation = await validator.validateReproSteps(reproSteps, workspaceDir, issue.title, issueKey);
+        logger.info(`Validation result: ${validation.bug_status}`);
+        logger.info(`Reasoning: ${validation.reasoning}`);
+      } finally {
+        await lspHarness.stop();
       }
     }
-    logger.info(`Analysis saved to ${outputPath}`);
+
+    // Step 4: Save results in both JSON and markdown formats
+    const outputDir = `.working/outputs/${issueRef.owner}-${issueRef.repo}-${issueRef.number}`;
+    ensureDirectoryExists(join(outputDir, 'dummy'));
+
+    const classificationPath = join(outputDir, 'classification.json');
+    await writeFile(classificationPath, JSON.stringify(classification, null, 2));
+
+    const reproStepsPath = join(outputDir, 'repro-steps.json');
+    await writeFile(reproStepsPath, JSON.stringify(reproSteps, null, 2));
+
+    if (validation) {
+      const validationPath = join(outputDir, 'validation.json');
+      await writeFile(validationPath, JSON.stringify(validation, null, 2));
+    }
+
+    // Generate human-readable markdown
+    const formatter = createReproFormatter();
+    const markdownPath = join(outputDir, 'report.md');
+    await writeFile(markdownPath, formatter.formatFullReport(classification, reproSteps, validation));
+
+    logger.info(`Results saved to ${outputDir}`);
+    logger.info(`  - classification.json: Bug classification`);
+    logger.info(`  - repro-steps.json: Reproduction steps`);
+    if (validation) {
+      logger.info(`  - validation.json: Validation results`);
+    }
+    logger.info(`  - report.md: Human-readable report`);
 
   } catch (error) {
-    logger.error(`Failed to analyze issue for static reproduction: ${error}`);
+    logger.error(`Failed to analyze issue for reproduction: ${error}`);
     process.exit(1);
   }
-}
-
-async function generateStaticRepro(ai: AIWrapper, issue: GitHubIssue, issueRef: IssueRef, config: Config, logger: Logger): Promise<StaticRepro> {
-  const body = issue.body ? issue.body.slice(0, config.github.maxIssueBodyLength) : '';
-  const recentComments = issue.comments
-    .slice(-3)
-    .map((c) => c.body.slice(0, config.github.maxCommentLength))
-    .join('\n---\n');
-
-  const messages = [
-    { role: 'system' as const, content: await loadPrompt('static-repro-system') },
-    { 
-      role: 'user' as const, 
-      content: await loadPrompt('static-repro-user', { 
-        issueNumber: String(issue.number), 
-        issueTitle: issue.title, 
-        body, 
-        recentComments 
-      }) 
-    },
-  ];
- 
-  const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-  const response = await ai.structuredCompletion(messages, StaticReproSchema, { 
-    maxTokens: 1500,
-    context: `Generate static reproduction analysis for ${issueKey}`,
-  });
-  
-  return response;
 }
 
 main().catch(console.error);

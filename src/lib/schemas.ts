@@ -170,7 +170,49 @@ export const IssueSummariesSchema = z.object({
 
 export type IssueSummaries = z.infer<typeof IssueSummariesSchema>;
 
-// Static Repro Schemas
+// New Repro Extraction Schemas (Step 1: Classification)
+export const BugClassificationSchema = z.object({
+  bugType: z.enum(['compiler', 'language-service', 'unknown']),
+  reasoning: z.string(),
+});
+
+export type BugClassification = z.infer<typeof BugClassificationSchema>;
+
+// Step 2: Repro Steps Schemas
+export const CompilerReproStepsSchema = z.object({
+  type: z.literal('compiler-repro'),
+  fileMap: z.record(z.string()), // filename -> content
+  cmdLineArgs: z.array(z.string()),
+  instructions: z.string(), // Must start with "The bug is fixed if" or "The bug still exists if"
+});
+
+export type CompilerReproSteps = z.infer<typeof CompilerReproStepsSchema>;
+
+export const LSReproStepsSchema = z.object({
+  type: z.literal('ls-repro'),
+  twoslash: z.string(), // Twoslash file content
+  instructions: z.string(), // Must start with "The bug is fixed if" or "The bug still exists if"
+});
+
+export type LSReproSteps = z.infer<typeof LSReproStepsSchema>;
+
+export const ReproStepsSchema = z.discriminatedUnion('type', [
+  CompilerReproStepsSchema,
+  LSReproStepsSchema,
+]);
+
+export type ReproSteps = z.infer<typeof ReproStepsSchema>;
+
+// Step 3: Bug Revalidation Schema
+export const BugRevalidationSchema = z.object({
+  bug_status: z.enum(['present', 'not present']),
+  relevant_output: z.string(),
+  reasoning: z.string(),
+});
+
+export type BugRevalidation = z.infer<typeof BugRevalidationSchema>;
+
+// Legacy Static Repro Schemas (deprecated but kept for backwards compatibility)
 export const StaticReproCliSchema = z.object({
   type: z.union([z.literal('cli'), z.literal('ls'), z.literal('unknown')]),
   files: z.array(z.object({

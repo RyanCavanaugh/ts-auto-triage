@@ -1,76 +1,77 @@
 import { describe, expect, test } from '@jest/globals';
-import { StaticReproSchema } from '../lib/schemas.js';
+import { 
+  CompilerReproStepsSchema, 
+  LSReproStepsSchema, 
+  BugClassificationSchema 
+} from '../lib/schemas.js';
 import { writeFile, readFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { ensureDirectoryExists } from '../lib/utils.js';
 
-describe('Static Repro Integration', () => {
-  test('should create valid output file format', async () => {
-    // Test CLI format
-    const cliOutput = {
-      type: 'cli' as const,
-      files: [
-        {
-          name: 'input.ts',
-          content: 'let x = [1, , , ,];'
-        }
-      ],
-      args: ['--noEmit', 'false'],
-      check: 'Read the produced file input.js. It should contain the sequence `[1, , , ,]`'
+describe('Repro Extraction Integration', () => {
+  test('should create valid compiler repro output', async () => {
+    const classification = {
+      bugType: 'compiler',
+      reasoning: 'Issue describes type checking error'
     };
 
-    const outputPath = '/tmp/test-static-repro-cli.json';
-    ensureDirectoryExists(outputPath);
-    await writeFile(outputPath, JSON.stringify(cliOutput, null, 2));
+    const reproSteps = {
+      type: 'compiler-repro',
+      fileMap: {
+        'index.ts': 'const x: number = "hello";'
+      },
+      cmdLineArgs: ['--noEmit'],
+      instructions: 'The bug still exists if tsc reports error TS2322'
+    };
 
-    // Verify the file can be read and parsed
+    const outputPath = '/tmp/test-repro-compiler.json';
+    ensureDirectoryExists(outputPath);
+    await writeFile(outputPath, JSON.stringify(reproSteps, null, 2));
+
     const readContent = await readFile(outputPath, 'utf-8');
     const parsed = JSON.parse(readContent);
-    const validated = StaticReproSchema.parse(parsed);
+    const validated = CompilerReproStepsSchema.parse(parsed);
 
-    expect(validated.type).toBe('cli');
-    expect(validated.files).toHaveLength(1);
-    expect(validated.files[0]?.name).toBe('input.ts');
+    expect(validated.type).toBe('compiler-repro');
+    expect(validated.fileMap['index.ts']).toBeTruthy();
+    expect(validated.instructions).toContain('bug still exists');
+  });
 
-    // Test LS format
-    const lsOutput = {
-      type: 'ls' as const,
-      files: [
-        {
-          name: 'main.ts',
-          content: 'interface Foo { bar: string; }\nconst x: Foo = { /*!*/ };'
-        }
-      ],
-      check: 'Hover at the query position should show completion options for Foo properties'
+  test('should create valid LS repro output', async () => {
+    const reproSteps = {
+      type: 'ls-repro',
+      twoslash: '// @fileName: main.ts\ninterface Foo { bar: string; }\nconst x: Foo = { /*!*/ };',
+      instructions: 'The bug still exists if completion list does not include bar'
     };
 
-    const lsOutputPath = '/tmp/test-static-repro-ls.json';
-    ensureDirectoryExists(lsOutputPath);
-    await writeFile(lsOutputPath, JSON.stringify(lsOutput, null, 2));
+    const outputPath = '/tmp/test-repro-ls.json';
+    ensureDirectoryExists(outputPath);
+    await writeFile(outputPath, JSON.stringify(reproSteps, null, 2));
 
-    const lsReadContent = await readFile(lsOutputPath, 'utf-8');
-    const lsParsed = JSON.parse(lsReadContent);
-    const lsValidated = StaticReproSchema.parse(lsParsed);
+    const readContent = await readFile(outputPath, 'utf-8');
+    const parsed = JSON.parse(readContent);
+    const validated = LSReproStepsSchema.parse(parsed);
 
-    expect(lsValidated.type).toBe('ls');
-    expect(lsValidated.files).toHaveLength(1);
-    expect(lsValidated.files[0]?.content).toContain('/*!*/');
+    expect(validated.type).toBe('ls-repro');
+    expect(validated.twoslash).toContain('/*!*/');
+    expect(validated.instructions).toContain('bug still exists');
+  });
 
-    // Test unknown format
-    const unknownOutput = {
-      type: 'unknown' as const,
-      reasoning: 'The issue description is too vague to determine the reproduction type'
+  test('should create valid classification output', async () => {
+    const classification = {
+      bugType: 'unknown',
+      reasoning: 'Issue description is too vague'
     };
 
-    const unknownOutputPath = '/tmp/test-static-repro-unknown.json';
-    ensureDirectoryExists(unknownOutputPath);
-    await writeFile(unknownOutputPath, JSON.stringify(unknownOutput, null, 2));
+    const outputPath = '/tmp/test-classification.json';
+    ensureDirectoryExists(outputPath);
+    await writeFile(outputPath, JSON.stringify(classification, null, 2));
 
-    const unknownReadContent = await readFile(unknownOutputPath, 'utf-8');
-    const unknownParsed = JSON.parse(unknownReadContent);
-    const unknownValidated = StaticReproSchema.parse(unknownParsed);
+    const readContent = await readFile(outputPath, 'utf-8');
+    const parsed = JSON.parse(readContent);
+    const validated = BugClassificationSchema.parse(parsed);
 
-    expect(unknownValidated.type).toBe('unknown');
-    expect(unknownValidated.reasoning).toBeTruthy();
+    expect(validated.bugType).toBe('unknown');
+    expect(validated.reasoning).toBeTruthy();
   });
 });

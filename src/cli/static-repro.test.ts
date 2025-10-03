@@ -1,102 +1,95 @@
 import { describe, expect, test } from '@jest/globals';
-import { StaticReproSchema, StaticReproCliSchema, StaticReproLsSchema, StaticReproUnknownSchema } from '../lib/schemas.js';
+import { 
+  BugClassificationSchema, 
+  CompilerReproStepsSchema, 
+  LSReproStepsSchema, 
+  BugRevalidationSchema 
+} from '../lib/schemas.js';
 
-describe('StaticRepro schemas', () => {
-  test('should validate CLI reproduction format', () => {
-    const cliRepro = {
-      type: 'cli',
-      files: [
-        {
-          name: 'input.ts',
-          content: 'let x = [1, , , ,];'
-        }
-      ],
-      args: ['--noEmit', 'false'],
-      check: 'Read the produced file input.js. It should contain the sequence `[1, , , ,]`'
+describe('New Repro Extraction schemas', () => {
+  test('should validate bug classification', () => {
+    const classification = {
+      bugType: 'compiler',
+      reasoning: 'The issue describes a type checking error'
     };
 
-    const result = StaticReproCliSchema.safeParse(cliRepro);
+    const result = BugClassificationSchema.safeParse(classification);
     expect(result.success).toBe(true);
-    
-    const staticResult = StaticReproSchema.safeParse(cliRepro);
-    expect(staticResult.success).toBe(true);
-    expect(staticResult.data?.type).toBe('cli');
+    expect(result.data?.bugType).toBe('compiler');
   });
 
-  test('should validate LS reproduction format', () => {
-    const lsRepro = {
-      type: 'ls',
-      files: [
-        {
-          name: 'main.ts',
-          content: 'interface Foo { bar: string; }\nconst x: Foo = { /*!*/ };'
-        }
-      ],
-      check: 'Hover at the query position should show completion options for Foo properties'
+  test('should validate compiler repro steps', () => {
+    const reproSteps = {
+      type: 'compiler-repro',
+      fileMap: {
+        'test.ts': 'const x: number = "hello";',
+        'tsconfig.json': '{"compilerOptions": {"strict": true}}'
+      },
+      cmdLineArgs: ['--noEmit'],
+      instructions: 'The bug still exists if tsc reports a type error'
     };
 
-    const result = StaticReproLsSchema.safeParse(lsRepro);
+    const result = CompilerReproStepsSchema.safeParse(reproSteps);
     expect(result.success).toBe(true);
-    
-    const staticResult = StaticReproSchema.safeParse(lsRepro);
-    expect(staticResult.success).toBe(true);
-    expect(staticResult.data?.type).toBe('ls');
+    expect(result.data?.type).toBe('compiler-repro');
+    expect(Object.keys(result.data?.fileMap ?? {})).toContain('test.ts');
   });
 
-  test('should validate unknown reproduction format', () => {
-    const unknownRepro = {
-      type: 'unknown',
-      reasoning: 'The issue description is too vague to determine if it requires CLI or LS testing'
+  test('should validate LS repro steps', () => {
+    const reproSteps = {
+      type: 'ls-repro',
+      twoslash: '// @fileName: test.ts\ninterface Foo { bar: string; }\nconst x: Foo = { /**/ };',
+      instructions: 'The bug still exists if completion list does not include bar'
     };
 
-    const result = StaticReproUnknownSchema.safeParse(unknownRepro);
+    const result = LSReproStepsSchema.safeParse(reproSteps);
     expect(result.success).toBe(true);
-    
-    const staticResult = StaticReproSchema.safeParse(unknownRepro);
-    expect(staticResult.success).toBe(true);
-    expect(staticResult.data?.type).toBe('unknown');
+    expect(result.data?.type).toBe('ls-repro');
+    expect(result.data?.twoslash).toContain('interface Foo');
   });
 
-  test('should reject invalid type', () => {
-    const invalidRepro = {
-      type: 'invalid',
-      files: [],
-      check: 'test'
+  test('should validate bug revalidation', () => {
+    const validation = {
+      bug_status: 'present',
+      relevant_output: 'Error: Type string is not assignable to type number',
+      reasoning: 'The expected type error was present in the output'
     };
 
-    const result = StaticReproSchema.safeParse(invalidRepro);
+    const result = BugRevalidationSchema.safeParse(validation);
+    expect(result.success).toBe(true);
+    expect(result.data?.bug_status).toBe('present');
+  });
+
+  test('should reject invalid bug type', () => {
+    const classification = {
+      bugType: 'invalid',
+      reasoning: 'test'
+    };
+
+    const result = BugClassificationSchema.safeParse(classification);
     expect(result.success).toBe(false);
   });
 
-  test('should require all CLI fields', () => {
-    const incompleteCli = {
-      type: 'cli',
-      files: [{ name: 'test.ts', content: 'test' }]
-      // missing args and check
+  test('should require instructions in compiler repro', () => {
+    const reproSteps = {
+      type: 'compiler-repro',
+      fileMap: { 'test.ts': 'code' },
+      cmdLineArgs: ['--noEmit']
+      // missing instructions
     };
 
-    const result = StaticReproCliSchema.safeParse(incompleteCli);
+    const result = CompilerReproStepsSchema.safeParse(reproSteps);
     expect(result.success).toBe(false);
   });
 
-  test('should require all LS fields', () => {
-    const incompleteLs = {
-      type: 'ls',
-      files: [{ name: 'test.ts', content: 'test' }]
-      // missing check
+  test('should require instructions in LS repro', () => {
+    const reproSteps = {
+      type: 'ls-repro',
+      twoslash: 'code'
+      // missing instructions
     };
 
-    const result = StaticReproLsSchema.safeParse(incompleteLs);
-    expect(result.success).toBe(false);
-  });
-
-  test('should require reasoning for unknown type', () => {
-    const incompleteUnknown = {
-      type: 'unknown'
-      // missing reasoning
-    };
-
-    const result = StaticReproUnknownSchema.safeParse(incompleteUnknown);
+    const result = LSReproStepsSchema.safeParse(reproSteps);
     expect(result.success).toBe(false);
   });
 });
