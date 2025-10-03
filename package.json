@@ -38,6 +38,7 @@
     "@types/node": "^20.19.11",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "@typescript/native-preview": "^7.0.0-dev.20251003.1",
     "eslint": "^8.0.0",
     "execa": "^9.6.0",
     "hereby": "^1.11.0",
