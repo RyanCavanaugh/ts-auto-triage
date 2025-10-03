@@ -72,6 +72,35 @@ describe('FAQ Matcher', () => {
     const mockAI: AIWrapper = {
       structuredCompletion: jest.fn().mockResolvedValue({
         has_match: false,
+        response: null,
+      }),
+    } as unknown as AIWrapper;
+
+    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
+
+    const result = await faqMatcher.checkFAQMatch(
+      'Test Issue',
+      'Test issue body',
+      mockIssueRef
+    );
+
+    expect(result).toBeNull();
+    expect(mockAI.structuredCompletion).toHaveBeenCalled();
+
+    // Cleanup
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test('should handle null response correctly when has_match is false', async () => {
+    const tmpDir = '/tmp/faq-test-null';
+    const faqPath = `${tmpDir}/FAQ.md`;
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(faqPath, '# FAQ\n\n## Question 1\nAnswer 1');
+
+    const mockAI: AIWrapper = {
+      structuredCompletion: jest.fn().mockResolvedValue({
+        has_match: false,
+        response: null, // Explicitly null as OpenAI API returns
       }),
     } as unknown as AIWrapper;
 
@@ -106,6 +135,7 @@ describe('FAQ Matcher', () => {
         }
         return {
           has_match: false,
+          response: null,
         };
       }),
     } as unknown as AIWrapper;
