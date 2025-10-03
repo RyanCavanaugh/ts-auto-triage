@@ -3,7 +3,7 @@
 import { readFile, writeFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity, createAuthenticatedOctokit } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity, getGitHubAuthToken, createAuthenticatedOctokit } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, type IssueRef, type Config } from '../lib/schemas.js';
 import { createFAQMatcher } from '../lib/faq-matcher.js';
@@ -43,7 +43,8 @@ async function main() {
       logger.info(`Issue data not found locally, fetching from GitHub...`);
       
       // Create authenticated Octokit client and issue fetcher
-      const { octokit, authToken } = await createAuthenticatedOctokit();
+      const authToken = getGitHubAuthToken();
+      const octokit = await createAuthenticatedOctokit(authToken);
       const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
       issue = await issueFetcher.fetchIssue(issueRef);
       

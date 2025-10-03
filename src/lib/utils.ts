@@ -101,19 +101,20 @@ export function createMockLogger(): Logger {
   };
 }
 
-export async function createAuthenticatedOctokit(): Promise<{ octokit: import('@octokit/rest').Octokit; authToken: string }> {
+export function getGitHubAuthToken(): string {
+  const { execSync } = require('child_process');
+  return execSync('gh auth token', { encoding: 'utf-8' }).trim();
+}
+
+export async function createAuthenticatedOctokit(authToken: string): Promise<import('@octokit/rest').Octokit> {
   const { Octokit } = await import('@octokit/rest');
-  const { execSync } = await import('child_process');
-  
-  // Get GitHub auth token
-  const authToken = execSync('gh auth token', { encoding: 'utf-8' }).trim();
   
   // Create GitHub client
   const octokit = new Octokit({
     auth: authToken,
   });
 
-  return { octokit, authToken };
+  return octokit;
 }
 
 import { z } from 'zod';
