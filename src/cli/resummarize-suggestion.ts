@@ -2,7 +2,7 @@
 
 import { readFile, writeFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, escapeTextForPrompt } from '../lib/utils.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, SuggestionSummarySchema, type IssueRef, type GitHubIssue, type Config, type SuggestionSummary } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
@@ -82,8 +82,8 @@ async function processSuggestion(
   const systemPrompt = await loadPrompt('resummarize-suggestion-system');
   const initialPrompt = await loadPrompt('resummarize-suggestion-initial', {
     issueNumber: String(issue.number),
-    issueTitle: issue.title,
-    body,
+    issueTitle: escapeTextForPrompt(issue.title),
+    body: escapeTextForPrompt(body),
   });
 
   let currentSummary = await aiWrapper.structuredCompletion<SuggestionSummary>(
@@ -112,7 +112,7 @@ async function processSuggestion(
       commentNumber: String(i + 1),
       commentAuthor: comment.user.login,
       authorAssociation: comment.author_association,
-      commentBody,
+      commentBody: escapeTextForPrompt(commentBody),
     });
 
     currentSummary = await aiWrapper.structuredCompletion<SuggestionSummary>(

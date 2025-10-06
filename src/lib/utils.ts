@@ -51,6 +51,22 @@ export function truncateText(text: string, maxLength: number): string {
   return text.slice(0, maxLength - 3) + '...';
 }
 
+/**
+ * Escapes special characters in text to prevent JSON parsing errors.
+ * This is needed when text will be embedded in prompts that are later JSON-stringified.
+ * Handles backslashes, quotes, newlines, and other control characters.
+ */
+export function escapeTextForPrompt(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')         // Escape backslashes first
+    .replace(/"/g, '\\"')           // Escape double quotes
+    .replace(/\n/g, '\\n')          // Escape newlines
+    .replace(/\r/g, '\\r')          // Escape carriage returns
+    .replace(/\t/g, '\\t')          // Escape tabs
+    .replace(/\f/g, '\\f')          // Escape form feeds
+    .replace(/[\b]/g, '\\b');       // Escape backspaces (using character class to avoid word boundary)
+}
+
 export function createCacheKey(content: string, endpoint: string): string {
   const combined = `${endpoint}:${content}`;
   const hash = createSimpleHash(combined);
