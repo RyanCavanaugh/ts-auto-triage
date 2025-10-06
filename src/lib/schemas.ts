@@ -261,7 +261,7 @@ export type FollowUp = z.infer<typeof FollowUpSchema>;
 export const ContributionSchema = z.object({
   body: z.string(),
   contributedBy: z.array(z.string()),
-  followUps: z.array(FollowUpSchema).optional(),
+  followUps: z.array(FollowUpSchema).nullable().optional(),
 });
 
 export type Contribution = z.infer<typeof ContributionSchema>;
@@ -269,7 +269,7 @@ export type Contribution = z.infer<typeof ContributionSchema>;
 export const SuggestionSummarySchema = z.object({
   suggestion: z.string(),
   contributions: z.array(ContributionSchema),
-  concerns: z.string().optional(),
+  concerns: z.string().nullable().optional(),
 });
 
 export type SuggestionSummary = z.infer<typeof SuggestionSummarySchema>;
