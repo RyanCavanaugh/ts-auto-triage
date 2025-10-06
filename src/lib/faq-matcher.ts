@@ -125,13 +125,15 @@ export function createFAQMatcher(
             context: `Check FAQ entry match for ${issueKey}: ${entry.title}`,
           });
 
-          if (response.match === 'yes') {
+          // Unwrap the result from the wrapper object
+          const match = response.result;
+          if (match.match === 'yes') {
             matches.push({
               entry,
-              confidence: response.confidence,
-              writeup: response.writeup,
+              confidence: match.confidence,
+              writeup: match.writeup,
             });
-            logger.debug(`FAQ match: ${entry.title} (confidence: ${response.confidence})`);
+            logger.debug(`FAQ match: ${entry.title} (confidence: ${match.confidence})`);
           }
         }
 

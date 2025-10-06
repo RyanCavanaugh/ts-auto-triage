@@ -195,7 +195,7 @@ Answer 3
       const mockAI: AIWrapper = {
         structuredCompletion: jest.fn().mockImplementation(async () => {
           callCount++;
-          return { match: 'no' };
+          return { result: { match: 'no' } };
         }),
       } as unknown as AIWrapper;
 
@@ -234,9 +234,9 @@ Answer 3
       const mockAI: AIWrapper = {
         structuredCompletion: jest.fn().mockImplementation(async () => {
           const responses = [
-            { match: 'yes' as const, confidence: 3, writeup: 'Low confidence response' },
-            { match: 'yes' as const, confidence: 9, writeup: 'High confidence response' },
-            { match: 'yes' as const, confidence: 6, writeup: 'Medium confidence response' },
+            { result: { match: 'yes' as const, confidence: 3, writeup: 'Low confidence response' } },
+            { result: { match: 'yes' as const, confidence: 9, writeup: 'High confidence response' } },
+            { result: { match: 'yes' as const, confidence: 6, writeup: 'Medium confidence response' } },
           ];
           return responses[callIndex++];
         }),
@@ -281,9 +281,9 @@ This also matches
       const mockAI: AIWrapper = {
         structuredCompletion: jest.fn().mockImplementation(async () => {
           const responses = [
-            { match: 'yes' as const, confidence: 7, writeup: 'First match' },
-            { match: 'no' as const },
-            { match: 'yes' as const, confidence: 8, writeup: 'Second match' },
+            { result: { match: 'yes' as const, confidence: 7, writeup: 'First match' } },
+            { result: { match: 'no' as const } },
+            { result: { match: 'yes' as const, confidence: 8, writeup: 'Second match' } },
           ];
           return responses[callIndex++];
         }),

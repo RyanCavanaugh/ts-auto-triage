@@ -69,12 +69,16 @@ Because there are no members which use \`T\`, there is nothing to infer from.
       structuredCompletion: jest.fn().mockImplementation(async () => {
         const responses = [
           {
-            match: 'yes' as const,
-            confidence: 9,
-            writeup: 'Your issue is asking about using `typeof T` in a generic function. This is a common question!\n\nIn TypeScript, generic type parameters like `T` only exist at compile time and are erased during compilation. At runtime, there is no `T` value to check with `typeof`.\n\nThe standard solution is to pass a constructor function as a parameter instead, which gives you a runtime value to work with.',
+            result: {
+              match: 'yes' as const,
+              confidence: 9,
+              writeup: 'Your issue is asking about using `typeof T` in a generic function. This is a common question!\n\nIn TypeScript, generic type parameters like `T` only exist at compile time and are erased during compilation. At runtime, there is no `T` value to check with `typeof`.\n\nThe standard solution is to pass a constructor function as a parameter instead, which gives you a runtime value to work with.',
+            }
           },
           {
-            match: 'no' as const,
+            result: {
+              match: 'no' as const,
+            }
           },
         ];
         if (callIndex >= responses.length) {
@@ -121,9 +125,11 @@ This is a test FAQ entry that addresses the user's question.
 
     const mockAI: AIWrapper = {
       structuredCompletion: jest.fn().mockResolvedValue({
-        match: 'yes' as const,
-        confidence: 8,
-        writeup: 'This FAQ entry addresses your concern about XYZ.',
+        result: {
+          match: 'yes' as const,
+          confidence: 8,
+          writeup: 'This FAQ entry addresses your concern about XYZ.',
+        }
       }),
     } as unknown as AIWrapper;
 
@@ -238,9 +244,9 @@ Answer 3
     const mockAI: AIWrapper = {
       structuredCompletion: jest.fn().mockImplementation(async () => {
         const responses = [
-          { match: 'yes' as const, confidence: 3, writeup: 'Low confidence' },
-          { match: 'yes' as const, confidence: 9, writeup: 'High confidence' },
-          { match: 'yes' as const, confidence: 6, writeup: 'Medium confidence' },
+          { result: { match: 'yes' as const, confidence: 3, writeup: 'Low confidence' } },
+          { result: { match: 'yes' as const, confidence: 9, writeup: 'High confidence' } },
+          { result: { match: 'yes' as const, confidence: 6, writeup: 'Medium confidence' } },
         ];
         if (callIndex >= responses.length) {
           throw new Error(`Mock called more times than expected (${callIndex + 1} > ${responses.length})`);
