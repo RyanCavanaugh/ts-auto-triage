@@ -133,9 +133,11 @@ export type EmbeddingsData = z.infer<typeof EmbeddingsDataSchema>;
 export type SummariesData = z.infer<typeof SummariesDataSchema>;
 
 // AI Response Schemas
+// Note: For Azure OpenAI structured outputs, use z.union([type, z.null()]) instead of .nullable()
+// Azure OpenAI doesn't support the "nullable: true" JSON Schema property
 export const FAQResponseSchema = z.object({
   has_match: z.boolean(),
-  response: z.string().nullable(), // Can be null when has_match is false
+  response: z.union([z.string(), z.null()]), // Can be null when has_match is false
 });
 
 export type FAQResponse = z.infer<typeof FAQResponseSchema>;

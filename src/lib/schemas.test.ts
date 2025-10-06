@@ -1,5 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 import { FAQResponseSchema } from './schemas.js';
+import { zodResponseFormat } from 'openai/helpers/zod.js';
 
 describe('FAQ Response Schema', () => {
   test('should accept response with has_match true and response string', () => {
@@ -84,5 +85,25 @@ describe('FAQ Response Schema', () => {
 
     const result = FAQResponseSchema.safeParse(data);
     expect(result.success).toBe(false);
+  });
+
+  test('should generate Azure OpenAI compatible JSON Schema', () => {
+    // This test ensures the schema generates valid JSON Schema for Azure OpenAI structured outputs
+    // Azure OpenAI doesn't support "nullable: true", only union types like ["string", "null"]
+    const format = zodResponseFormat(FAQResponseSchema, 'response');
+    
+    expect(format.json_schema.schema.type).toBe('object');
+    expect(format.json_schema.schema.properties).toHaveProperty('has_match');
+    expect(format.json_schema.schema.properties).toHaveProperty('response');
+    
+    // The response field should use union type, not nullable property
+    const responseField = format.json_schema.schema.properties.response as Record<string, unknown>;
+    expect(responseField).toHaveProperty('type');
+    expect(Array.isArray(responseField.type)).toBe(true);
+    expect(responseField.type).toContain('string');
+    expect(responseField.type).toContain('null');
+    
+    // Should NOT have "nullable: true" property which Azure OpenAI doesn't support
+    expect(responseField).not.toHaveProperty('nullable');
   });
 });

@@ -44,6 +44,15 @@ export interface AIWrapper {
     context?: string; // Optional context for cache logging
   }): Promise<ChatCompletionResponse>;
 
+  /**
+   * Make a structured completion request with a Zod schema
+   * 
+   * IMPORTANT: For nullable fields, use z.union([type, z.null()]) instead of .nullable()
+   * Azure OpenAI doesn't support the "nullable: true" JSON Schema property.
+   * 
+   * ✅ Correct: z.union([z.string(), z.null()])
+   * ❌ Wrong:   z.string().nullable()
+   */
   structuredCompletion<T>(
     messages: ChatMessage[],
     jsonSchema: z.ZodSchema<T>,
