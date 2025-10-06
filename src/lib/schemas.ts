@@ -143,7 +143,9 @@ export const FAQResponseSchema = z.object({
 export type FAQResponse = z.infer<typeof FAQResponseSchema>;
 
 // Per-FAQ-entry match response schema
-export const FAQEntryMatchSchema = z.discriminatedUnion('match', [
+// Note: The inner discriminated union is wrapped in an object because Azure OpenAI
+// structured outputs require the root schema to have type: "object"
+const FAQEntryMatchInnerSchema = z.discriminatedUnion('match', [
   z.object({
     match: z.literal('no'),
   }),
@@ -154,7 +156,11 @@ export const FAQEntryMatchSchema = z.discriminatedUnion('match', [
   }),
 ]);
 
-export type FAQEntryMatch = z.infer<typeof FAQEntryMatchSchema>;
+export const FAQEntryMatchSchema = z.object({
+  result: FAQEntryMatchInnerSchema,
+});
+
+export type FAQEntryMatch = z.infer<typeof FAQEntryMatchInnerSchema>;
 
 export const ReproCodeSchema = z.object({
   approach: z.string(),
