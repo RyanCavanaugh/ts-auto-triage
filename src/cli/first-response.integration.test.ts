@@ -77,6 +77,9 @@ Because there are no members which use \`T\`, there is nothing to infer from.
             match: 'no' as const,
           },
         ];
+        if (callIndex >= responses.length) {
+          throw new Error(`Mock called more times than expected (${callIndex + 1} > ${responses.length})`);
+        }
         return responses[callIndex++];
       }),
     } as unknown as AIWrapper;
@@ -239,6 +242,9 @@ Answer 3
           { match: 'yes' as const, confidence: 9, writeup: 'High confidence' },
           { match: 'yes' as const, confidence: 6, writeup: 'Medium confidence' },
         ];
+        if (callIndex >= responses.length) {
+          throw new Error(`Mock called more times than expected (${callIndex + 1} > ${responses.length})`);
+        }
         const result = responses[callIndex];
         callIndex++;
         return result;
