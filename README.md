@@ -42,6 +42,21 @@ This repository implements a comprehensive TypeScript issue management and backl
 - Proper TypeScript types throughout with strict settings
 - ESM modules with verbatim module syntax
 
+**Important: For Azure OpenAI structured outputs**, nullable fields must use `z.union([type, z.null()])` instead of `.nullable()`. Azure OpenAI doesn't support the `"nullable": true` JSON Schema property and requires union types like `["string", "null"]` instead.
+
+Example:
+```typescript
+// ✅ Correct: Use union type for Azure OpenAI
+const schema = z.object({
+  response: z.union([z.string(), z.null()])
+});
+
+// ❌ Wrong: Don't use .nullable() with structuredCompletion
+const schema = z.object({
+  response: z.string().nullable()  // This will fail!
+});
+```
+
 ### AI Integration  
 - Azure OpenAI wrapper with Entra ID authentication
 - Content-based caching for all AI calls
