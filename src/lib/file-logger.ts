@@ -2,6 +2,13 @@ import { writeFile, appendFile } from 'fs/promises';
 import { ensureDirectoryExists } from './utils.js';
 import type { IssueRef } from './schemas.js';
 
+/**
+ * Get the log file path for a given issue and task
+ */
+export function getLogPath(issueRef: IssueRef, task: string): string {
+  return `.logs/${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}/${task}-${issueRef.number}.md`;
+}
+
 export interface FileLogger {
   /**
    * Log a section header in the markdown file
@@ -46,7 +53,7 @@ export function createFileLogger(
   issueRef: IssueRef,
   task: string
 ): FileLogger {
-  const logPath = `.logs/${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}/${task}-${issueRef.number}.md`;
+  const logPath = getLogPath(issueRef, task);
   ensureDirectoryExists(logPath);
 
   let isInitialized = false;

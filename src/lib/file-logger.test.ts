@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { rm, readFile } from 'fs/promises';
-import { createFileLogger } from './file-logger.js';
+import { createFileLogger, getLogPath } from './file-logger.js';
 import type { IssueRef } from './schemas.js';
 
 describe('File Logger', () => {
@@ -10,7 +10,7 @@ describe('File Logger', () => {
     number: 12345,
   };
 
-  const logPath = `.logs/${testIssueRef.owner.toLowerCase()}/${testIssueRef.repo.toLowerCase()}/test-task-${testIssueRef.number}.md`;
+  const logPath = getLogPath(testIssueRef, 'test-task');
 
   beforeEach(async () => {
     // Clean up any existing test logs
