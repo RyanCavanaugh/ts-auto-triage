@@ -8,6 +8,8 @@ import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, type IssueRef, type Config } from '../lib/schemas.js';
 import { createFAQMatcher } from '../lib/faq-matcher.js';
 import { createIssueFetcher } from '../lib/issue-fetcher.js';
+import { createFileLogger } from '../lib/file-logger.js';
+import { createLoggingAIWrapper } from '../lib/logging-ai-wrapper.js';
 
 async function main() {
   const logger = createConsoleLogger();
@@ -26,12 +28,20 @@ async function main() {
 
     logger.info(`Checking first response for: ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`);
 
+    // Create file logger for this issue
+    const fileLogger = createFileLogger(issueRef, 'first-response');
+    await fileLogger.logSection('Initialization');
+    await fileLogger.logInfo(`Processing issue: ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`);
+
     // Load configuration
     const configContent = await readFile('config.jsonc', 'utf-8');
     const config = ConfigSchema.parse(jsonc.parse(configContent));
+    await fileLogger.logInfo('Configuration loaded successfully');
 
     // Create AI wrapper
-    const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
+    const baseAI = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
+    const ai = createLoggingAIWrapper(baseAI, fileLogger);
+    await fileLogger.logInfo('AI wrapper initialized');
 
     // Load the issue data - fetch if not available locally
     const issueFilePath = `.data/${issueRef.owner.toLowerCase()}/${issueRef.repo.toLowerCase()}/${issueRef.number}.json`;
@@ -39,7 +49,10 @@ async function main() {
     try {
       const issueContent = await readFile(issueFilePath, 'utf-8');
       issue = GitHubIssueSchema.parse(JSON.parse(issueContent));
+      await fileLogger.logSection('Issue Data');
+      await fileLogger.logInfo(`Loaded issue data from local cache: ${issueFilePath}`);
     } catch {
+      await fileLogger.logInfo(`Issue data not found locally, fetching from GitHub...`);
       logger.info(`Issue data not found locally, fetching from GitHub...`);
       
       // Create authenticated Octokit client and issue fetcher
@@ -48,45 +61,82 @@ async function main() {
       const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
       issue = await issueFetcher.fetchIssue(issueRef);
       
+      await fileLogger.logInfo(`Successfully fetched issue from GitHub`);
       logger.info(`Successfully fetched issue from GitHub`);
     }
+
+    await fileLogger.logData('Issue Metadata', {
+      title: issue.title,
+      number: issue.number,
+      state: issue.state,
+      created_at: issue.created_at,
+      user: issue.user.login,
+      body_length: issue.body?.length ?? 0,
+      comments_count: issue.comments?.length ?? 0,
+    });
 
     // Only process issue body, not comments (as per spec)
     const issueBody = issue.body ?? '';
     if (!issueBody.trim()) {
+      await fileLogger.logDecision('No action needed', 'Issue has no body content to analyze');
+      await fileLogger.finalize();
       logger.info('Issue has no body content to analyze');
       return;
     }
 
     logger.info(`Analyzing issue: ${issue.title}`);
+    await fileLogger.logSection('Issue Analysis');
+    await fileLogger.logInfo(`Issue title: ${issue.title}`);
+    await fileLogger.logInfo(`Issue body length: ${issueBody.length} characters`);
 
     // Create FAQ matcher
     const faqMatcher = createFAQMatcher(ai, logger);
 
     // Check FAQ entries using new per-entry matching
+    await fileLogger.logSection('FAQ Matching');
     let faqMatches: Awaited<ReturnType<typeof faqMatcher.checkAllFAQMatches>> = [];
     try {
+      await fileLogger.logInfo('Checking for FAQ matches...');
       faqMatches = await faqMatcher.checkAllFAQMatches(issue.title, issueBody, issueRef);
       if (faqMatches.length > 0) {
+        await fileLogger.logDecision(`Found ${faqMatches.length} FAQ match(es)`);
+        await fileLogger.logData('FAQ Matches', faqMatches.map(m => ({
+          title: m.entry.title,
+          confidence: m.confidence,
+          writeup_length: m.writeup.length,
+        })));
         logger.info(`Found ${faqMatches.length} FAQ match(es)`);
+      } else {
+        await fileLogger.logDecision('No FAQ matches found');
       }
     } catch (error) {
+      await fileLogger.logInfo(`FAQ check failed: ${error}`);
       logger.debug(`FAQ check failed: ${error}`);
     }
 
     // Check for duplicates and similar issues
+    await fileLogger.logSection('Duplicate Detection');
     let similarIssues: string[] = [];
     try {
-      similarIssues = await findDuplicates(ai, issueBody, issue.title, issueRef, config);
+      await fileLogger.logInfo('Searching for similar issues...');
+      similarIssues = await findDuplicates(ai, issueBody, issue.title, issueRef, config, fileLogger);
+      await fileLogger.logDecision(`Found ${similarIssues.length} similar issues`);
+      if (similarIssues.length > 0) {
+        await fileLogger.logData('Similar Issues', similarIssues);
+      }
       logger.debug(`Found ${similarIssues.length} similar issues`);
     } catch (error) {
+      await fileLogger.logInfo(`Similar issue search failed: ${error}`);
       logger.debug(`Similar issue search failed: ${error}`);
     }
 
     // Generate combined action if needed
+    await fileLogger.logSection('Action Generation');
     const actions = [];
 
     if (faqMatches.length > 0 || similarIssues.length > 0) {
+      await fileLogger.logDecision('Creating combined response action', `FAQ matches: ${faqMatches.length}, Similar issues: ${similarIssues.length}`);
+      
       // Merge FAQ responses and duplicate detection into a single comment
       let combinedComment = '';
 
@@ -113,6 +163,10 @@ async function main() {
         kind: 'add_comment' as const,
         body: combinedComment,
       });
+      
+      await fileLogger.logData('Generated Comment', combinedComment);
+    } else {
+      await fileLogger.logDecision('No action needed', 'No FAQ matches or similar issues found');
     }
 
     if (actions.length > 0) {
@@ -130,10 +184,14 @@ async function main() {
 ${JSON.stringify(actionFile, null, 2)}`;
 
       await writeFile(actionFilePath, actionFileContent);
+      await fileLogger.logInfo(`Action file written to ${actionFilePath}`);
+      await fileLogger.logData('Action File', actionFile);
       logger.info(`Action file written to ${actionFilePath}`);
     } else {
       logger.info('No automatic response needed');
     }
+
+    await fileLogger.finalize();
 
   } catch (error) {
     logger.error(`Failed to check first response: ${error}`);
@@ -141,11 +199,12 @@ ${JSON.stringify(actionFile, null, 2)}`;
   }
 }
 
-async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef, config: Config): Promise<string[]> {
+async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef, config: Config, fileLogger: ReturnType<typeof createFileLogger>): Promise<string[]> {
   // Load summaries 
   const summariesContent = await readFile('.data/summaries.json', 'utf-8');
   const summaries = SummariesDataSchema.parse(JSON.parse(summariesContent));
 
+  await fileLogger.logInfo('Creating embedding for current issue...');
   // Create embedding for current issue
   const currentIssueText = `${issueTitle}\n\n${issueBody.slice(0, 2000)}`;
   // Cap the string length for embedding input to avoid API errors
@@ -160,6 +219,7 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
 
   // Recursively find all .embeddings.json files in .data directory
   const embeddingFiles = await findEmbeddingFiles('.data');
+  await fileLogger.logInfo(`Found ${embeddingFiles.length} embedding files to compare against`);
 
   for (const filePath of embeddingFiles) {
     // Extract issue key from file path: .data/owner/repo/123.embeddings.json -> owner/repo#123
@@ -208,6 +268,13 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
   // Sort by similarity and return top 5 with emojis for high similarity
   similarities.sort((a, b) => b.similarity - a.similarity);
   const top5 = similarities.slice(0, 5);
+
+  await fileLogger.logInfo(`Computed similarities for ${similarities.length} issues`);
+  await fileLogger.logData('Top 5 Similar Issues', top5.map(s => ({
+    issueKey: s.issueKey,
+    similarity: s.similarity,
+    percentage: Math.round(s.similarity * 100),
+  })));
 
   const HIGH_SIMILARITY_THRESHOLD = 0.7; // Threshold for high similarity emoji
 
