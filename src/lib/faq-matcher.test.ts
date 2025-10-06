@@ -322,7 +322,7 @@ Test answer
           if (userMessage) {
             capturedBody = userMessage.content;
           }
-          return { match: 'no' };
+          return { result: { match: 'no' } };
         }),
       } as unknown as AIWrapper;
 
