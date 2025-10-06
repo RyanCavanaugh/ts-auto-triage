@@ -97,7 +97,9 @@ describe('FAQ Response Schema', () => {
     expect(format.json_schema.schema.properties).toHaveProperty('response');
     
     // The response field should use union type, not nullable property
-    const responseField = format.json_schema.schema.properties.response as Record<string, unknown>;
+    const properties = format.json_schema.schema.properties as Record<string, { type?: unknown; nullable?: boolean }>;
+    const responseField = properties.response;
+    
     expect(responseField).toHaveProperty('type');
     expect(Array.isArray(responseField.type)).toBe(true);
     expect(responseField.type).toContain('string');
