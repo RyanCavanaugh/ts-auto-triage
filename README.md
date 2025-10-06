@@ -32,7 +32,8 @@ This repository implements a comprehensive TypeScript issue management and backl
 6. `summarize-issues`: AI summaries and embeddings ✅ **Complete**
 7. `curate-issue`: AI-powered issue curation ✅ **Complete**  
 8. `first-response`: FAQ matching and duplicate detection ✅ **Complete**
-9. ~~`repro-issue`~~: Old repro logic (deprecated, use `static-repro` instead)
+9. `resummarize-suggestion`: Extract contributions from suggestion discussions ✅ **Complete**
+10. ~~`repro-issue`~~: Old repro logic (deprecated, use `static-repro` instead)
 
 ## Architecture
 
@@ -102,6 +103,42 @@ npx static-repro test/test-repo#1003  # Unknown bug
 
 **Note:** The old `repro-issue` command is deprecated. Use `static-repro` instead.
 
+### Suggestion Resummarization
+
+The `resummarize-suggestion` command processes suggestion issues to extract meaningful contributions from comment threads.
+
+**How it works:**
+1. Starts with the initial suggestion body
+2. Iterates through each comment one-by-one
+3. AI identifies contributions (technical insights, use cases, examples)
+4. Merges similar contributions
+5. Identifies follow-ups to existing contributions
+6. Captures maintainer concerns
+7. Outputs a structured markdown summary
+
+**Usage:**
+```bash
+npx resummarize-suggestion Microsoft/TypeScript#202
+```
+
+**Output:** 
+- Markdown file in `.working/actions/` with:
+  - The suggestion description
+  - All meaningful contributions with attributions
+  - Follow-up discussions
+  - Maintainer concerns
+
+**What counts as a contribution:**
+- References to libraries that would benefit
+- Demonstrative code samples
+- Concrete use cases with details
+- Technical observations
+
+**What is ignored:**
+- "+1", "me too", "need this" comments
+- Off-topic or personal content
+- Duplicate observations
+
 ## Usage Examples
 
 ```bash
@@ -114,6 +151,7 @@ npx summarize-issues Microsoft/TypeScript
 npx curate-issue Microsoft/TypeScript#50139
 npx first-response Microsoft/TypeScript#50139
 npx repro-issue Microsoft/TypeScript#50139
+npx resummarize-suggestion Microsoft/TypeScript#202
 
 # Execute proposed actions
 npx exec-action Microsoft/TypeScript#50139

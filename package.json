@@ -17,7 +17,8 @@
     "list-triggers": "dist/cli/list-triggers.js",
     "get-repro-steps": "dist/cli/get-repro-steps.js",
     "check-ai": "dist/cli/check-ai.js",
-    "twoslash": "dist/cli/twoslash.js"
+    "twoslash": "dist/cli/twoslash.js",
+    "resummarize-suggestion": "dist/cli/resummarize-suggestion.js"
   },
   "scripts": {
     "build": "hereby build",

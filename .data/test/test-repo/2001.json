@@ -1,0 +1,131 @@
+{
+  "id": 2001,
+  "number": 2001,
+  "title": "Suggestion: Add tagged template literal types",
+  "body": "It would be useful to have a way to type tagged template literals more precisely. Currently, we can only type the tag function, but not the template literal itself.\n\n```typescript\nfunction sql(strings: TemplateStringsArray, ...values: unknown[]): SqlQuery {\n  // implementation\n}\n\nconst query = sql`SELECT * FROM users WHERE id = ${userId}`;\n```\n\nI propose adding a way to specify that certain functions can only be called as tagged template literals, and to validate the structure of the template at compile time.\n\nThis would help prevent SQL injection and other security issues by ensuring that only specific patterns are allowed in template literals.",
+  "user": {
+    "login": "contributor1",
+    "id": 101,
+    "type": "User"
+  },
+  "state": "open",
+  "state_reason": null,
+  "labels": [
+    {
+      "id": 1,
+      "name": "Suggestion",
+      "color": "00ff00",
+      "description": "Feature request"
+    }
+  ],
+  "milestone": null,
+  "assignees": [],
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-15T00:00:00Z",
+  "closed_at": null,
+  "author_association": "CONTRIBUTOR",
+  "reactions": {
+    "+1": 15,
+    "heart": 3
+  },
+  "comments": [
+    {
+      "id": 1,
+      "body": "This would be incredibly useful for our GraphQL client library. We use tagged template literals extensively and would love compile-time validation.\n\nHere's an example of how we'd use it:\n```typescript\nconst query = gql`\n  query GetUser($id: ID!) {\n    user(id: $id) {\n      name\n      email\n    }\n  }\n`;\n```\n\nCurrently we have to do runtime validation which catches errors too late.",
+      "user": {
+        "login": "contributor2",
+        "id": 102,
+        "type": "User"
+      },
+      "created_at": "2024-01-02T00:00:00Z",
+      "updated_at": "2024-01-02T00:00:00Z",
+      "author_association": "CONTRIBUTOR",
+      "reactions": {
+        "+1": 8
+      }
+    },
+    {
+      "id": 2,
+      "body": "+1 need this!",
+      "user": {
+        "login": "user1",
+        "id": 103,
+        "type": "User"
+      },
+      "created_at": "2024-01-03T00:00:00Z",
+      "updated_at": "2024-01-03T00:00:00Z",
+      "author_association": "NONE",
+      "reactions": {}
+    },
+    {
+      "id": 3,
+      "body": "We use this pattern in styled-components as well. The ability to validate CSS syntax at compile time would be amazing.",
+      "user": {
+        "login": "contributor3",
+        "id": 104,
+        "type": "User"
+      },
+      "created_at": "2024-01-05T00:00:00Z",
+      "updated_at": "2024-01-05T00:00:00Z",
+      "author_association": "CONTRIBUTOR",
+      "reactions": {
+        "+1": 5
+      }
+    },
+    {
+      "id": 4,
+      "body": "There's actually a library called 'ts-sql-plugin' that provides some of this functionality via a language service plugin, but it's limited and doesn't provide true compile-time checking.",
+      "user": {
+        "login": "contributor2",
+        "id": 102,
+        "type": "User"
+      },
+      "created_at": "2024-01-06T00:00:00Z",
+      "updated_at": "2024-01-06T00:00:00Z",
+      "author_association": "CONTRIBUTOR",
+      "reactions": {}
+    },
+    {
+      "id": 5,
+      "body": "While I understand the appeal, this has some significant downsides:\n\n1. It would require substantial changes to the type checker\n2. It could significantly slow down compilation for projects that use tagged template literals heavily\n3. The validation logic would need to be pluggable, which adds complexity\n4. It's unclear how errors in the template would be reported in a user-friendly way\n\nWe've discussed this internally and while it's potentially valuable, the implementation cost is quite high relative to the benefit, especially given that language service plugins can provide similar functionality today.",
+      "user": {
+        "login": "typescript-maintainer",
+        "id": 105,
+        "type": "User"
+      },
+      "created_at": "2024-01-10T00:00:00Z",
+      "updated_at": "2024-01-10T00:00:00Z",
+      "author_association": "MEMBER",
+      "reactions": {}
+    },
+    {
+      "id": 6,
+      "body": "It's 2024, why isn't this implemented yet?",
+      "user": {
+        "login": "user2",
+        "id": 106,
+        "type": "User"
+      },
+      "created_at": "2024-01-12T00:00:00Z",
+      "updated_at": "2024-01-12T00:00:00Z",
+      "author_association": "NONE",
+      "reactions": {}
+    },
+    {
+      "id": 7,
+      "body": "I've built a proof of concept for this using template literal types and it works reasonably well for simple cases. The main issue is handling complex interpolations.\n\n```typescript\ntype SqlTemplate<T extends string> = T extends `SELECT ${infer Rest}` ? ValidSql<Rest> : never;\n```\n\nBut this approach breaks down quickly with real-world queries.",
+      "user": {
+        "login": "contributor4",
+        "id": 107,
+        "type": "User"
+      },
+      "created_at": "2024-01-15T00:00:00Z",
+      "updated_at": "2024-01-15T00:00:00Z",
+      "author_association": "CONTRIBUTOR",
+      "reactions": {
+        "+1": 3
+      }
+    }
+  ],
+  "is_pull_request": false
+}

@@ -263,3 +263,27 @@ export type StaticReproCli = z.infer<typeof StaticReproCliSchema>;
 export type StaticReproLs = z.infer<typeof StaticReproLsSchema>;
 export type StaticReproUnknown = z.infer<typeof StaticReproUnknownSchema>;
 export type StaticRepro = z.infer<typeof StaticReproSchema>;
+
+// Suggestion Resummarization Schemas
+export const FollowUpSchema = z.object({
+  body: z.string(),
+  contributedBy: z.array(z.string()),
+});
+
+export type FollowUp = z.infer<typeof FollowUpSchema>;
+
+export const ContributionSchema = z.object({
+  body: z.string(),
+  contributedBy: z.array(z.string()),
+  followUps: z.array(FollowUpSchema).nullable().optional(),
+});
+
+export type Contribution = z.infer<typeof ContributionSchema>;
+
+export const SuggestionSummarySchema = z.object({
+  suggestion: z.string(),
+  contributions: z.array(ContributionSchema),
+  concerns: z.string().nullable().optional(),
+});
+
+export type SuggestionSummary = z.infer<typeof SuggestionSummarySchema>;
