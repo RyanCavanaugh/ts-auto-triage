@@ -63,12 +63,15 @@ async function main() {
     // Create FAQ matcher
     const faqMatcher = createFAQMatcher(ai, logger);
 
-    // Check FAQ entries
-    let faqResponse: string | null = null;
+    // Check FAQ entries using new per-entry matching
+    let faqMatches: Awaited<ReturnType<typeof faqMatcher.checkAllFAQMatches>> = [];
     try {
-      faqResponse = await faqMatcher.checkFAQMatch(issue.title, issueBody, issueRef);
-    } catch {
-      logger.debug('No FAQ.md file found, skipping FAQ check');
+      faqMatches = await faqMatcher.checkAllFAQMatches(issue.title, issueBody, issueRef);
+      if (faqMatches.length > 0) {
+        logger.info(`Found ${faqMatches.length} FAQ match(es)`);
+      }
+    } catch (error) {
+      logger.debug(`FAQ check failed: ${error}`);
     }
 
     // Check for duplicates and similar issues
@@ -80,23 +83,35 @@ async function main() {
       logger.debug(`Similar issue search failed: ${error}`);
     }
 
-    // Generate action if needed
+    // Generate combined action if needed
     const actions = [];
 
-    if (faqResponse) {
-      logger.info('Found relevant FAQ entry, creating response action');
-      actions.push({
-        kind: 'add_comment' as const,
-        body: faqResponse,
-      });
-    }
+    if (faqMatches.length > 0 || similarIssues.length > 0) {
+      // Merge FAQ responses and duplicate detection into a single comment
+      let combinedComment = '';
 
-    if (similarIssues.length > 0) {
-      logger.info(`Found ${similarIssues.length} similar issues`);
-      const similarComment = `Here are the most similar issues I found:\n\n${similarIssues.map(s => `- ${s}`).join('\n')}\n\nPlease check if any of these resolve your issue before proceeding.`;
+      if (faqMatches.length > 0) {
+        combinedComment += '## FAQ Responses\n\n';
+        
+        for (const match of faqMatches) {
+          combinedComment += `### ${match.entry.title}\n\n`;
+          combinedComment += `${match.writeup}\n\n`;
+        }
+      }
+
+      if (similarIssues.length > 0) {
+        if (combinedComment) {
+          combinedComment += '---\n\n';
+        }
+        combinedComment += `## Similar Issues\n\n`;
+        combinedComment += `Here are the most similar issues I found:\n\n${similarIssues.map(s => `- ${s}`).join('\n')}\n\n`;
+        combinedComment += `Please check if any of these resolve your issue before proceeding.\n`;
+      }
+
+      logger.info('Creating combined response action');
       actions.push({
         kind: 'add_comment' as const,
-        body: similarComment,
+        body: combinedComment,
       });
     }
 

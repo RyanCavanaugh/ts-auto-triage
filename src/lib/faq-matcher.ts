@@ -1,9 +1,19 @@
 import { readFile } from 'fs/promises';
 import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
-import type { IssueRef, FAQResponse } from './schemas.js';
-import { FAQResponseSchema } from './schemas.js';
+import type { IssueRef, FAQResponse, FAQEntryMatch } from './schemas.js';
+import { FAQResponseSchema, FAQEntryMatchSchema } from './schemas.js';
 import { loadPrompt } from './prompts.js';
+import { parseFAQ, type FAQEntry } from './faq-parser.js';
+
+export interface FAQMatchResult {
+  /** The FAQ entry that matched */
+  entry: FAQEntry;
+  /** The confidence score (1-10) */
+  confidence: number;
+  /** The tailored writeup for the user */
+  writeup: string;
+}
 
 export interface FAQMatcher {
   /**
@@ -18,6 +28,19 @@ export interface FAQMatcher {
     issueBody: string,
     issueRef: IssueRef
   ): Promise<string | null>;
+
+  /**
+   * Check each FAQ entry separately and return all matches
+   * @param issueTitle The title of the issue
+   * @param issueBody The body/description of the issue
+   * @param issueRef Reference to the issue (owner/repo#number)
+   * @returns Array of FAQ matches sorted by confidence (highest first)
+   */
+  checkAllFAQMatches(
+    issueTitle: string,
+    issueBody: string,
+    issueRef: IssueRef
+  ): Promise<FAQMatchResult[]>;
 }
 
 /**
@@ -63,6 +86,62 @@ export function createFAQMatcher(
       } catch (error) {
         logger.debug(`FAQ file not found or error reading: ${error}`);
         return null;
+      }
+    },
+
+    async checkAllFAQMatches(
+      issueTitle: string,
+      issueBody: string,
+      issueRef: IssueRef
+    ): Promise<FAQMatchResult[]> {
+      try {
+        // Load and parse FAQ content
+        const faqContent = await readFile(faqFilePath, 'utf-8');
+        const faqEntries = parseFAQ(faqContent);
+
+        logger.debug(`Checking ${faqEntries.length} FAQ entries`);
+
+        const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
+        const truncatedBody = issueBody.slice(0, 4000);
+
+        // Check each FAQ entry separately
+        const matches: FAQMatchResult[] = [];
+
+        for (const entry of faqEntries) {
+          const systemPrompt = await loadPrompt('faq-entry-match-system');
+          const userPrompt = await loadPrompt('faq-entry-match-user', {
+            issueTitle,
+            issueBody: truncatedBody,
+            faqEntry: entry.content,
+          });
+
+          const messages = [
+            { role: 'system' as const, content: systemPrompt },
+            { role: 'user' as const, content: userPrompt },
+          ];
+
+          const response = await ai.structuredCompletion(messages, FAQEntryMatchSchema, {
+            maxTokens: 500,
+            context: `Check FAQ entry match for ${issueKey}: ${entry.title}`,
+          });
+
+          if (response.match === 'yes') {
+            matches.push({
+              entry,
+              confidence: response.confidence,
+              writeup: response.writeup,
+            });
+            logger.debug(`FAQ match: ${entry.title} (confidence: ${response.confidence})`);
+          }
+        }
+
+        // Sort by confidence (highest first)
+        matches.sort((a, b) => b.confidence - a.confidence);
+
+        return matches;
+      } catch (error) {
+        logger.debug(`FAQ checking failed: ${error}`);
+        return [];
       }
     },
   };

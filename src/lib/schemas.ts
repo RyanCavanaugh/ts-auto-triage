@@ -140,6 +140,20 @@ export const FAQResponseSchema = z.object({
 
 export type FAQResponse = z.infer<typeof FAQResponseSchema>;
 
+// Per-FAQ-entry match response schema
+export const FAQEntryMatchSchema = z.discriminatedUnion('match', [
+  z.object({
+    match: z.literal('no'),
+  }),
+  z.object({
+    match: z.literal('yes'),
+    confidence: z.number().min(1).max(10),
+    writeup: z.string(),
+  }),
+]);
+
+export type FAQEntryMatch = z.infer<typeof FAQEntryMatchSchema>;
+
 export const ReproCodeSchema = z.object({
   approach: z.string(),
   files: z.array(z.object({
