@@ -77,7 +77,7 @@ Because there are no members which use \`T\`, there is nothing to infer from.
             match: 'no' as const,
           },
         ];
-        return responses[callIndex++ % responses.length];
+        return responses[callIndex++];
       }),
     } as unknown as AIWrapper;
 
@@ -239,7 +239,9 @@ Answer 3
           { match: 'yes' as const, confidence: 9, writeup: 'High confidence' },
           { match: 'yes' as const, confidence: 6, writeup: 'Medium confidence' },
         ];
-        return responses[callIndex++];
+        const result = responses[callIndex];
+        callIndex++;
+        return result;
       }),
     } as unknown as AIWrapper;
 
