@@ -9,6 +9,7 @@ node_modules/
 .kvcache/
 .working/
 .logs/
+.reports/
 
 # IDE
 .vscode/

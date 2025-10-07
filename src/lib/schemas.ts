@@ -311,3 +311,46 @@ export const CommentProcessingResultSchema = z.object({
 });
 
 export type CommentProcessingResult = z.infer<typeof CommentProcessingResultSchema>;
+
+// Newspaper / Timeline Schemas
+export const TimelineEventActorSchema = z.object({
+  login: z.string(),
+  id: z.number(),
+  type: z.string(),
+});
+
+export const TimelineEventSchema = z.object({
+  id: z.number().optional(),
+  event: z.string(),
+  actor: TimelineEventActorSchema.nullable().optional(),
+  created_at: z.string(),
+  author_association: z.string().optional(),
+  body: z.string().optional(),
+  label: z.object({
+    name: z.string(),
+    color: z.string(),
+  }).optional(),
+  assignee: TimelineEventActorSchema.optional(),
+  assigner: TimelineEventActorSchema.optional(),
+  milestone: z.object({
+    title: z.string(),
+  }).optional(),
+  rename: z.object({
+    from: z.string(),
+    to: z.string(),
+  }).optional(),
+  html_url: z.string().optional(),
+  user: TimelineEventActorSchema.optional(), // For comments
+});
+
+export type TimelineEvent = z.infer<typeof TimelineEventSchema>;
+
+export const CommentSummarySchema = z.object({
+  summary: z.string(),
+  action_needed: z.union([z.object({
+    category: z.enum(['moderation', 'response']),
+    reason: z.string(),
+  }), z.null()]),
+});
+
+export type CommentSummary = z.infer<typeof CommentSummarySchema>;
