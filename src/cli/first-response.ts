@@ -289,12 +289,10 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
     percentage: Math.round(s.similarity * 100),
   })));
 
-  const HIGH_SIMILARITY_THRESHOLD = 0.7; // Threshold for high similarity emoji
 
   // Load issue data to get titles
   const formattedIssues: string[] = [];
   for (const s of top5) {
-    const emoji = s.similarity >= HIGH_SIMILARITY_THRESHOLD ? '🔥 ' : '';
     const percentage = Math.round(s.similarity * 100);
     
     // Parse issue key to get owner/repo/number
@@ -321,10 +319,9 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
     
     // Get the summaries
     const currentSummary = currentIssueSummaries[s.currentSummaryIndex] ?? 'No summary available';
-    const similarIssueSummary = s.summary || 'No summary available';
 
     // Format the output
-    const formattedIssue = `${emoji}[#${number} - ${issueTitle}](${redirectUrl}) (${percentage}% similar)\n   * This issue: ${currentSummary}\n   * Your issue: ${similarIssueSummary}`;
+    const formattedIssue = `[#${number} - ${issueTitle}](${redirectUrl}) (${percentage}% similar)\n   * ${currentSummary}\n`;
     formattedIssues.push(formattedIssue);
   }
 

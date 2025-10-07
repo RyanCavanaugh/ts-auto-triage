@@ -1,9 +1,11 @@
-Issue Title: {{issueTitle}}
+<issueTitle>
+{{issueTitle}}
+</issueTitle>
 
-Issue Body:
+<issueDescription>
 {{issueBody}}
+</issueDescription>
 
-FAQ Entry:
-{{faqEntry}}
-
-Does this FAQ entry address the user's issue?
+<faqEntry>
+{{faqContent}}
+</faqEntry>

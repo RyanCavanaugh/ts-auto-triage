@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises';
 
 export async function loadPrompt(name: string, vars?: Record<string, unknown>): Promise<string> {
+  vars = { styleGuide: await readFile('prompts/style.md', 'utf-8'), ...vars}
   const path = `prompts/${name}.md`;
   let content: string;
 

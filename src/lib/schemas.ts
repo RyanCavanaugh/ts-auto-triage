@@ -137,6 +137,7 @@ export type SummariesData = z.infer<typeof SummariesDataSchema>;
 // Azure OpenAI doesn't support the "nullable: true" JSON Schema property
 export const FAQResponseSchema = z.object({
   has_match: z.boolean(),
+  reasoning: z.string(),
   response: z.union([z.string(), z.null()]), // Can be null when has_match is false
 });
 
@@ -148,6 +149,7 @@ export type FAQResponse = z.infer<typeof FAQResponseSchema>;
 const FAQEntryMatchInnerSchema = z.discriminatedUnion('match', [
   z.object({
     match: z.literal('no'),
+    reasoning: z.string(),
   }),
   z.object({
     match: z.literal('yes'),

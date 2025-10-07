@@ -1,17 +1,3 @@
-# Frequently Asked Questions
-
-### Why isn't my issue being processed?
-
-> Q: I submitted an issue yesterday but haven't seen any automated response. Is the system working?
-
-The automated triage system processes issues in batches. New issues are typically reviewed within 24-48 hours. If your issue involves a complex reproduction case, it may take longer for the system to validate the reported behavior.
-
-### How does the duplicate detection work?
-
-> Q: The bot marked my issue as a duplicate, but I think it's different from the linked issue. What should I do?
-
-The duplicate detection uses semantic similarity analysis on issue summaries. If you believe the marking is incorrect, please comment explaining the key differences between your issue and the suggested duplicate. A maintainer will review and update the classification if needed.
-
 ### Nominal or Tagged Types
 
 > Can you add some way to do non-structural (nominal or branded or otherwise) typing?
@@ -20,9 +6,9 @@ See suggestion #202
 
 ### Negated Types
 
-> Can you add some way to say "not a string" or "any number but zero" ?
+> > Can you add some way to say "a string but not an empty string", "any number but zero", or some other way to represent the general exclusion of a set of values from an existing type?
 
-See suggestion #4196
+This suggestion has already been logged - see #4196.
 
 ### Exact Types
 

@@ -40,6 +40,8 @@ export class MaintainerResponseTrigger implements CurationTrigger {
 
     const actions: IssueAction[] = [];
 
+    // TODO what even is this
+    /*
     // Check for FAQ matches
     try {
       const faqMatcher = createFAQMatcher(ai, logger);
@@ -52,7 +54,7 @@ export class MaintainerResponseTrigger implements CurationTrigger {
       }
     } catch (error) {
       logger.debug(`${this.name}: FAQ check failed: ${error}`);
-    }
+    }*/
 
     // Check for similar issues (simplified duplicate detection)
     try {

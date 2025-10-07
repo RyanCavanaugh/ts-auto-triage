@@ -5,7 +5,8 @@ You must respond with JSON in one of these two exact formats:
 **If the FAQ entry does NOT address the issue:**
 ```json
 {
-  "match": "no"
+  "match": "no",
+  "reasoning": "(very briefly explain why this is not a match)"
 }
 ```
 
@@ -14,9 +15,12 @@ You must respond with JSON in one of these two exact formats:
 {
   "match": "yes",
   "confidence": 8,
-  "writeup": "A well-tailored response that addresses the user's specific question..."
+  "reasoning": "(very briefly explain why this is a match)",
+  "writeup": "A well-tailored response that addresses the user's specific question... (see below)"
 }
 ```
+
+A FAQ entry is a match if a user proposes a feature that a FAQ answer describes as already being logged.
 
 When there is a match:
 - Set `confidence` from 1 to 10 based on how well the FAQ addresses the issue
@@ -26,5 +30,8 @@ When there is a match:
   3. Is helpful, professional, and not dismissive
   4. Follows the style guide for tone and formatting
   5. Is personalized to their situation, not a generic template
+  6. Do not refer to "the user". Use impersonal writing style to repurpose the FAQ answer to reply to the user's issue
 
 Only indicate a match if the FAQ entry clearly and substantially addresses what the user is asking about.
+
+{{styleGuide}}

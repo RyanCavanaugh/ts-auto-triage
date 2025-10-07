@@ -15,34 +15,6 @@ export interface FAQMatchResult {
   writeup: string;
 }
 
-export interface FAQMatcher {
-  /**
-   * Check if an issue matches any FAQ entries and return a response if so
-   * @param issueTitle The title of the issue
-   * @param issueBody The body/description of the issue
-   * @param issueRef Reference to the issue (owner/repo#number)
-   * @returns A helpful response string if FAQ matches, null otherwise
-   */
-  checkFAQMatch(
-    issueTitle: string,
-    issueBody: string,
-    issueRef: IssueRef
-  ): Promise<string | null>;
-
-  /**
-   * Check each FAQ entry separately and return all matches
-   * @param issueTitle The title of the issue
-   * @param issueBody The body/description of the issue
-   * @param issueRef Reference to the issue (owner/repo#number)
-   * @returns Array of FAQ matches sorted by confidence (highest first)
-   */
-  checkAllFAQMatches(
-    issueTitle: string,
-    issueBody: string,
-    issueRef: IssueRef
-  ): Promise<FAQMatchResult[]>;
-}
-
 /**
  * Create an FAQ matcher that uses AI to find matches between issues and FAQ content
  * @param ai The AI wrapper for making completions
@@ -53,42 +25,8 @@ export function createFAQMatcher(
   ai: AIWrapper,
   logger: Logger,
   faqFilePath: string = 'FAQ.md'
-): FAQMatcher {
+) {
   return {
-    async checkFAQMatch(
-      issueTitle: string,
-      issueBody: string,
-      issueRef: IssueRef
-    ): Promise<string | null> {
-      try {
-        // Try to load FAQ content
-        const faqContent = await readFile(faqFilePath, 'utf-8');
-
-        const systemPrompt = await loadPrompt('first-response-system');
-        const userPrompt = await loadPrompt('first-response-user', {
-          issueTitle,
-          issueBody: issueBody.slice(0, 4000),
-          faqContent,
-        });
-
-        const messages = [
-          { role: 'system' as const, content: systemPrompt },
-          { role: 'user' as const, content: userPrompt },
-        ];
-
-        const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-        const response = await ai.structuredCompletion(messages, FAQResponseSchema, {
-          maxTokens: 500,
-          context: `Check FAQ matches for ${issueKey}`,
-        });
-
-        return response.has_match ? response.response ?? null : null;
-      } catch (error) {
-        logger.debug(`FAQ file not found or error reading: ${error}`);
-        return null;
-      }
-    },
-
     async checkAllFAQMatches(
       issueTitle: string,
       issueBody: string,
@@ -112,7 +50,7 @@ export function createFAQMatcher(
           const userPrompt = await loadPrompt('faq-entry-match-user', {
             issueTitle,
             issueBody: truncatedBody,
-            faqEntry: entry.content,
+            faqContent: entry.content,
           });
 
           const messages = [
