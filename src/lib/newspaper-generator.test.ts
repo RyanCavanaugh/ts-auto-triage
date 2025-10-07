@@ -78,6 +78,7 @@ describe('NewspaperGenerator', () => {
       
       expect(report).toContain('1 different users commented on 1 different issues');
       expect(report).toContain('test/repo#1');
+      expect(report).toContain('**Test Issue**');
       expect(report).toContain('created by [@testuser]');
     });
 

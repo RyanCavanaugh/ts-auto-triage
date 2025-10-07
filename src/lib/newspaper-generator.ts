@@ -122,6 +122,7 @@ async function buildIssueSummary(
   const issueType = issue.is_pull_request ? 'Pull Request' : 'Issue';
   
   let markdown = `### [${issueType} ${issueRef.owner}/${issueRef.repo}#${issueRef.number}](${issueUrl})\n\n`;
+  markdown += `**${issue.title}**\n\n`;
   
   const actions: ActionItem[] = [];
   
