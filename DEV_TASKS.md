@@ -4,7 +4,11 @@ This document describes the hereby tasks available for inspecting and analyzing 
 
 ## Tasks
 
-### `hereby first-response -- <issue-ref>`
+All CLI entry points now have corresponding `hereby` tasks. Use `npx hereby --tasks` to see the full list of available tasks.
+
+### Issue Analysis Tasks
+
+#### `hereby first-response -- <issue-ref>`
 
 Performs an automated first response check on a new issue, checking for:
 - FAQ matches
@@ -15,7 +19,7 @@ Performs an automated first response check on a new issue, checking for:
 hereby first-response -- Microsoft/TypeScript#9998
 ```
 
-### `hereby list-triggers -- <issue-ref>`
+#### `hereby list-triggers -- <issue-ref>`
 
 Lists all curation triggers and shows which ones would activate for the given issue.
 
@@ -30,7 +34,18 @@ hereby list-triggers -- Microsoft/TypeScript#9998
 - Displays trigger descriptions
 - Shows total count of active/inactive triggers
 
-### `hereby get-repro-steps -- <issue-ref>`
+#### `hereby curate-issue -- <issue-ref>`
+
+Run AI-powered curation on an issue to get action recommendations.
+
+**Example:**
+```bash
+hereby curate-issue -- Microsoft/TypeScript#9998
+```
+
+### Reproduction Tasks
+
+#### `hereby get-repro-steps -- <issue-ref>`
 
 Generates reproduction steps for an issue using AI analysis. This performs:
 1. Bug classification (compiler/language-service/unknown)
@@ -47,13 +62,115 @@ hereby get-repro-steps -- Microsoft/TypeScript#9998
 - `repro-steps.json` - Generated reproduction steps
 - `report.md` - Human-readable report
 
+#### `hereby static-repro -- <issue-ref> [--validate]`
+
+Run the new reproduction extraction process with optional validation.
+
+**Example:**
+```bash
+hereby static-repro -- Microsoft/TypeScript#9998
+hereby static-repro -- Microsoft/TypeScript#9998 --validate
+```
+
+#### `hereby repro-issue -- <issue-ref>`
+
+Run old repro extraction logic (deprecated, use static-repro instead).
+
+**Example:**
+```bash
+hereby repro-issue -- Microsoft/TypeScript#9998
+```
+
+### Data Fetching Tasks
+
+#### `hereby fetch-issue -- <issue-ref>`
+
+Fetch a single issue from GitHub and cache it locally.
+
+**Example:**
+```bash
+hereby fetch-issue -- Microsoft/TypeScript#9998
+```
+
+#### `hereby fetch-issues -- <owner/repo>`
+
+Fetch all issues for a repository from GitHub.
+
+**Example:**
+```bash
+hereby fetch-issues -- Microsoft/TypeScript
+```
+
+### AI Processing Tasks
+
+#### `hereby summarize-issues -- <owner/repo>`
+
+Generate AI summaries for all issues in a repository.
+
+**Example:**
+```bash
+hereby summarize-issues -- Microsoft/TypeScript
+```
+
+#### `hereby compute-embeddings -- <owner/repo>`
+
+Compute embeddings for issues in a repository.
+
+**Example:**
+```bash
+hereby compute-embeddings -- Microsoft/TypeScript
+```
+
+#### `hereby resummarize-suggestion -- <issue-ref>`
+
+Extract contributions from suggestion discussions.
+
+**Example:**
+```bash
+hereby resummarize-suggestion -- Microsoft/TypeScript#202
+```
+
+### Action Execution Tasks
+
+#### `hereby exec-action -- <issue-ref>`
+
+Execute proposed actions for an issue (adds labels, comments, etc.).
+
+**Example:**
+```bash
+hereby exec-action -- Microsoft/TypeScript#9998
+```
+
+### Testing and Validation Tasks
+
+#### `hereby twoslash -- <filename.md> <command> [--cwd <directory>]`
+
+Run TypeScript LSP testing harness.
+
+**Commands:** `signature-help`, `hover`, `completions`
+
+**Example:**
+```bash
+hereby twoslash -- example.md hover --cwd /path/to/project
+```
+
+#### `hereby check-ai`
+
+Validate Azure OpenAI configuration (no arguments needed).
+
+**Example:**
+```bash
+hereby check-ai
+```
+
 ## Prerequisites
 
 Before using these tasks, you need to:
-1. Fetch the issue data first: `node dist/cli/fetch-issue.js <issue-ref>`
-2. Have proper Azure OpenAI configuration in `config.jsonc`
-3. Have GitHub authentication set up (for list-triggers)
+1. Build the project: `npx hereby build`
+2. Fetch the issue data first (if working with specific issues): `npx hereby fetch-issue -- <issue-ref>`
+3. Have proper Azure OpenAI configuration in `config.jsonc` (for AI-powered tasks)
+4. Have GitHub authentication set up (for tasks that interact with GitHub API)
 
 ## Note on Syntax
 
-The tasks require the `--` separator before the issue reference (e.g., `hereby list-triggers -- owner/repo#123`). This is necessary because hereby's argument parser treats any non-option arguments as additional task names to run. The `--` tells hereby to stop parsing for task names and pass the remaining arguments to the task itself.
+The tasks require the `--` separator before arguments (e.g., `hereby list-triggers -- owner/repo#123`). This is necessary because hereby's argument parser treats any non-option arguments as additional task names to run. The `--` tells hereby to stop parsing for task names and pass the remaining arguments to the task itself.
