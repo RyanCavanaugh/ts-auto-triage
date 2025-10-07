@@ -145,7 +145,34 @@ export const FAQResponseSchema = z.object({
 
 export type FAQResponse = z.infer<typeof FAQResponseSchema>;
 
-// Per-FAQ-entry match response schema
+// Per-FAQ-entry match response schema (two-stage approach)
+// Stage 1: Check if FAQ entry matches (without writing full response)
+const FAQEntryCheckInnerSchema = z.discriminatedUnion('match', [
+  z.object({
+    match: z.literal('no'),
+    reasoning: z.string(),
+  }),
+  z.object({
+    match: z.literal('yes'),
+    confidence: z.number().min(1).max(10),
+    reasoning: z.string(),
+  }),
+]);
+
+export const FAQEntryCheckSchema = z.object({
+  result: FAQEntryCheckInnerSchema,
+});
+
+export type FAQEntryCheck = z.infer<typeof FAQEntryCheckInnerSchema>;
+
+// Stage 2: Generate writeup for matched FAQ entry
+export const FAQEntryWriteupSchema = z.object({
+  writeup: z.string(),
+});
+
+export type FAQEntryWriteup = z.infer<typeof FAQEntryWriteupSchema>;
+
+// Legacy: Per-FAQ-entry match response schema (combined approach - deprecated)
 // Note: The inner discriminated union is wrapped in an object because Azure OpenAI
 // structured outputs require the root schema to have type: "object"
 const FAQEntryMatchInnerSchema = z.discriminatedUnion('match', [

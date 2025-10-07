@@ -1,8 +1,8 @@
 import { readFile } from 'fs/promises';
 import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
-import type { IssueRef, FAQResponse, FAQEntryMatch } from './schemas.js';
-import { FAQResponseSchema, FAQEntryMatchSchema } from './schemas.js';
+import type { IssueRef, FAQResponse, FAQEntryMatch, FAQEntryCheck, FAQEntryWriteup } from './schemas.js';
+import { FAQResponseSchema, FAQEntryMatchSchema, FAQEntryCheckSchema, FAQEntryWriteupSchema } from './schemas.js';
 import { loadPrompt } from './prompts.js';
 import { parseFAQ, type FAQEntry } from './faq-parser.js';
 
@@ -46,39 +46,61 @@ export function createFAQMatcher(
         const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
         const truncatedBody = issueBody.slice(0, 4000);
 
-        // Check each FAQ entry separately
+        // Check each FAQ entry separately using two-stage approach
         const matches: FAQMatchResult[] = [];
 
         for (const entry of faqEntries) {
-          const systemPrompt = await loadPrompt('faq-entry-match-system');
-          const userPrompt = await loadPrompt('faq-entry-match-user', {
+          // Stage 1: Check if this FAQ entry matches
+          const checkSystemPrompt = await loadPrompt('faq-entry-check-system');
+          const checkUserPrompt = await loadPrompt('faq-entry-check-user', {
             issueTitle,
             issueBody: truncatedBody,
             faqContent: entry.content,
           });
 
-          const messages = [
-            { role: 'system' as const, content: systemPrompt },
-            { role: 'user' as const, content: userPrompt },
+          const checkMessages = [
+            { role: 'system' as const, content: checkSystemPrompt },
+            { role: 'user' as const, content: checkUserPrompt },
           ];
 
-          const response = await ai.structuredCompletion(messages, FAQEntryMatchSchema, {
-            maxTokens: 500,
+          const checkResponse = await ai.structuredCompletion(checkMessages, FAQEntryCheckSchema, {
+            maxTokens: 200,
             context: `Check FAQ entry match for ${issueKey}: ${entry.title}`,
           });
 
           // Unwrap the result from the wrapper object
-          const match = response.result;
-          if (match.match === 'yes') {
-            const url = faqUrl ? `${faqUrl}#${entry.anchor}` : '';
-            matches.push({
-              entry,
-              confidence: match.confidence,
-              writeup: match.writeup,
-              url,
-            });
-            logger.debug(`FAQ match: ${entry.title} (confidence: ${match.confidence})`);
+          const check = checkResponse.result;
+          if (check.match === 'no') {
+            // No match, skip to next entry
+            continue;
           }
+
+          // Stage 2: Generate writeup for this matched entry
+          const writeupSystemPrompt = await loadPrompt('faq-entry-writeup-system');
+          const writeupUserPrompt = await loadPrompt('faq-entry-writeup-user', {
+            issueTitle,
+            issueBody: truncatedBody,
+            faqContent: entry.content,
+          });
+
+          const writeupMessages = [
+            { role: 'system' as const, content: writeupSystemPrompt },
+            { role: 'user' as const, content: writeupUserPrompt },
+          ];
+
+          const writeupResponse = await ai.structuredCompletion(writeupMessages, FAQEntryWriteupSchema, {
+            maxTokens: 500,
+            context: `Generate FAQ writeup for ${issueKey}: ${entry.title}`,
+          });
+
+          const url = faqUrl ? `${faqUrl}#${entry.anchor}` : '';
+          matches.push({
+            entry,
+            confidence: check.confidence,
+            writeup: writeupResponse.writeup,
+            url,
+          });
+          logger.debug(`FAQ match: ${entry.title} (confidence: ${check.confidence})`);
         }
 
         // Sort by confidence (highest first)
