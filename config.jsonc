@@ -18,7 +18,8 @@
     "maxIssueBodyLength": 8000,
     "maxCommentLength": 2000,
     "rateLimitRetryDelay": 5000,
-    "maxRetries": 3
+    "maxRetries": 3,
+    "faqUrl": "https://github.com/microsoft/TypeScript/wiki/FAQ"
   },
   "ai": {
     "maxReproAttempts": 3,

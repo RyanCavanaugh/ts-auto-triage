@@ -90,7 +90,7 @@ async function main() {
     await fileLogger.logInfo(`Issue body length: ${issueBody.length} characters`);
 
     // Create FAQ matcher
-    const faqMatcher = createFAQMatcher(ai, logger);
+    const faqMatcher = createFAQMatcher(ai, logger, 'FAQ.md', config.github.faqUrl);
 
     // Check FAQ entries using new per-entry matching
     await fileLogger.logSection('FAQ Matching');
@@ -144,7 +144,11 @@ async function main() {
         combinedComment += '## FAQ Responses\n\n';
         
         for (const match of faqMatches) {
-          combinedComment += `### ${match.entry.title}\n\n`;
+          if (match.url) {
+            combinedComment += `### [${match.entry.title}](${match.url})\n\n`;
+          } else {
+            combinedComment += `### ${match.entry.title}\n\n`;
+          }
           combinedComment += `${match.writeup}\n\n`;
         }
       }

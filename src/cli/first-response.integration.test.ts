@@ -88,7 +88,8 @@ Because there are no members which use \`T\`, there is nothing to infer from.
       }),
     } as unknown as AIWrapper;
 
-    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
+    const faqUrl = 'https://github.com/microsoft/TypeScript/wiki/FAQ';
+    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath, faqUrl);
 
     const matches = await faqMatcher.checkAllFAQMatches(
       "Why doesn't typeof T work in my generic function?",
@@ -102,16 +103,21 @@ Because there are no members which use \`T\`, there is nothing to infer from.
     expect(matches[0]!.entry.title).toBe("Why can't I use typeof T in my generic function?");
     expect(matches[0]!.writeup).toContain('generic type parameters');
     expect(matches[0]!.writeup).toContain('erased during compilation');
+    expect(matches[0]!.url).toBe('https://github.com/microsoft/TypeScript/wiki/FAQ#why-cant-i-use-typeof-t-in-my-generic-function');
 
-    // Verify the merged comment format
+    // Verify the merged comment format with hyperlinks
     let mergedComment = '## FAQ Responses\n\n';
     for (const match of matches) {
-      mergedComment += `### ${match.entry.title}\n\n`;
+      if (match.url) {
+        mergedComment += `### [${match.entry.title}](${match.url})\n\n`;
+      } else {
+        mergedComment += `### ${match.entry.title}\n\n`;
+      }
       mergedComment += `${match.writeup}\n\n`;
     }
 
     expect(mergedComment).toContain('## FAQ Responses');
-    expect(mergedComment).toContain("### Why can't I use typeof T in my generic function?");
+    expect(mergedComment).toContain("[Why can't I use typeof T in my generic function?](https://github.com/microsoft/TypeScript/wiki/FAQ#why-cant-i-use-typeof-t-in-my-generic-function)");
     expect(mergedComment).toContain('generic type parameters');
   });
 
@@ -133,7 +139,8 @@ This is a test FAQ entry that addresses the user's question.
       }),
     } as unknown as AIWrapper;
 
-    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
+    const faqUrl = 'https://github.com/microsoft/TypeScript/wiki/FAQ';
+    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath, faqUrl);
 
     const faqMatches = await faqMatcher.checkAllFAQMatches(
       'Test Issue',
@@ -153,7 +160,11 @@ This is a test FAQ entry that addresses the user's question.
     if (faqMatches.length > 0) {
       combinedComment += '## FAQ Responses\n\n';
       for (const match of faqMatches) {
-        combinedComment += `### ${match.entry.title}\n\n`;
+        if (match.url) {
+          combinedComment += `### [${match.entry.title}](${match.url})\n\n`;
+        } else {
+          combinedComment += `### ${match.entry.title}\n\n`;
+        }
         combinedComment += `${match.writeup}\n\n`;
       }
     }
@@ -169,7 +180,7 @@ This is a test FAQ entry that addresses the user's question.
 
     // Verify the structure
     expect(combinedComment).toContain('## FAQ Responses');
-    expect(combinedComment).toContain('### Test FAQ Entry');
+    expect(combinedComment).toContain('[Test FAQ Entry](https://github.com/microsoft/TypeScript/wiki/FAQ#test-faq-entry)');
     expect(combinedComment).toContain('This FAQ entry addresses your concern');
     expect(combinedComment).toContain('---');
     expect(combinedComment).toContain('## Similar Issues');
@@ -195,7 +206,8 @@ This does not match the issue.
       }),
     } as unknown as AIWrapper;
 
-    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
+    const faqUrl = 'https://github.com/microsoft/TypeScript/wiki/FAQ';
+    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath, faqUrl);
 
     const faqMatches = await faqMatcher.checkAllFAQMatches(
       'Test Issue',
@@ -261,7 +273,8 @@ Answer 3
       }),
     } as unknown as AIWrapper;
 
-    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
+    const faqUrl = 'https://github.com/microsoft/TypeScript/wiki/FAQ';
+    const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath, faqUrl);
 
     const matches = await faqMatcher.checkAllFAQMatches(
       'Test Issue',
