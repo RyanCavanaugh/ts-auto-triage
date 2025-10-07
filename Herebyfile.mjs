@@ -83,6 +83,7 @@ function getRepoRefFromArgs(taskName) {
 export const firstResponse = task({
     name: "first-response",
     description: "Run first-response check on an issue",
+    dependencies: [build],
     run: async () => {
         const issueRef = getIssueRefFromArgs('first-response');
         await execa("node", ["dist/cli/first-response.js", issueRef], { stdio: "inherit" });
@@ -92,6 +93,7 @@ export const firstResponse = task({
 export const listTriggers = task({
     name: "list-triggers",
     description: "List triggers that would activate for an issue",
+    dependencies: [build],
     run: async () => {
         const issueRef = getIssueRefFromArgs('list-triggers');
         await execa("node", ["dist/cli/list-triggers.js", issueRef], { stdio: "inherit" });
@@ -101,6 +103,7 @@ export const listTriggers = task({
 export const getReproSteps = task({
     name: "get-repro-steps",
     description: "Generate reproduction steps for an issue",
+    dependencies: [build],
     run: async () => {
         const issueRef = getIssueRefFromArgs('get-repro-steps');
         await execa("node", ["dist/cli/get-repro-steps.js", issueRef], { stdio: "inherit" });
@@ -110,6 +113,7 @@ export const getReproSteps = task({
 export const fetchIssue = task({
     name: "fetch-issue",
     description: "Fetch a single issue from GitHub",
+    dependencies: [build],
     run: async () => {
         const issueRef = getIssueRefFromArgs('fetch-issue');
         await execa("node", ["dist/cli/fetch-issue.js", issueRef], { stdio: "inherit" });
@@ -119,6 +123,7 @@ export const fetchIssue = task({
 export const curateIssue = task({
     name: "curate-issue",
     description: "Run AI-powered curation on an issue",
+    dependencies: [build],
     run: async () => {
         const issueRef = getIssueRefFromArgs('curate-issue');
         await execa("node", ["dist/cli/curate-issue.js", issueRef], { stdio: "inherit" });
@@ -128,6 +133,7 @@ export const curateIssue = task({
 export const execAction = task({
     name: "exec-action",
     description: "Execute proposed actions for an issue",
+    dependencies: [build],
     run: async () => {
         const issueRef = getIssueRefFromArgs('exec-action');
         await execa("node", ["dist/cli/exec-action.js", issueRef], { stdio: "inherit" });
@@ -137,6 +143,7 @@ export const execAction = task({
 export const resummarizeSuggestion = task({
     name: "resummarize-suggestion",
     description: "Extract contributions from suggestion discussions",
+    dependencies: [build],
     run: async () => {
         const issueRef = getIssueRefFromArgs('resummarize-suggestion');
         await execa("node", ["dist/cli/resummarize-suggestion.js", issueRef], { stdio: "inherit" });
@@ -146,6 +153,7 @@ export const resummarizeSuggestion = task({
 export const reproIssue = task({
     name: "repro-issue",
     description: "Run old repro extraction logic (deprecated, use static-repro instead)",
+    dependencies: [build],
     run: async () => {
         const issueRef = getIssueRefFromArgs('repro-issue');
         await execa("node", ["dist/cli/repro-issue.js", issueRef], { stdio: "inherit" });
@@ -155,6 +163,7 @@ export const reproIssue = task({
 export const fetchIssues = task({
     name: "fetch-issues",
     description: "Fetch all issues for a repository from GitHub",
+    dependencies: [build],
     run: async () => {
         const repoRef = getRepoRefFromArgs('fetch-issues');
         await execa("node", ["dist/cli/fetch-issues.js", repoRef], { stdio: "inherit" });
@@ -164,6 +173,7 @@ export const fetchIssues = task({
 export const summarizeIssues = task({
     name: "summarize-issues",
     description: "Generate AI summaries for all issues in a repository",
+    dependencies: [build],
     run: async () => {
         const repoRef = getRepoRefFromArgs('summarize-issues');
         await execa("node", ["dist/cli/summarize-issues.js", repoRef], { stdio: "inherit" });
@@ -173,6 +183,7 @@ export const summarizeIssues = task({
 export const computeEmbeddings = task({
     name: "compute-embeddings",
     description: "Compute embeddings for issues in a repository",
+    dependencies: [build],
     run: async () => {
         const repoRef = getRepoRefFromArgs('compute-embeddings');
         await execa("node", ["dist/cli/compute-embeddings.js", repoRef], { stdio: "inherit" });
@@ -182,6 +193,7 @@ export const computeEmbeddings = task({
 export const checkAi = task({
     name: "check-ai",
     description: "Validate Azure OpenAI configuration",
+    dependencies: [build],
     run: async () => {
         await execa("node", ["dist/cli/check-ai.js"], { stdio: "inherit" });
     },
@@ -190,6 +202,7 @@ export const checkAi = task({
 export const staticRepro = task({
     name: "static-repro",
     description: "Run new repro extraction process (with optional --validate flag)",
+    dependencies: [build],
     run: async () => {
         const separatorIndex = process.argv.indexOf('--');
         if (separatorIndex < 0 || separatorIndex >= process.argv.length - 1) {
@@ -208,6 +221,7 @@ export const staticRepro = task({
 export const twoslash = task({
     name: "twoslash",
     description: "Run TypeScript LSP testing harness",
+    dependencies: [build],
     run: async () => {
         const separatorIndex = process.argv.indexOf('--');
         if (separatorIndex < 0 || separatorIndex >= process.argv.length - 2) {
