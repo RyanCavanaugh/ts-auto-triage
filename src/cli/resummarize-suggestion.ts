@@ -75,7 +75,7 @@ async function processSuggestion(
     structuredCompletion: <T>(messages: Array<{ role: string; content: string }>, schema: unknown, options?: { maxTokens?: number; context?: string }) => Promise<T>;
     chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string }) => Promise<{ content: string }>;
   };
-  const log = logger as { info: (msg: string) => void; debug: (msg: string) => void };
+  const log = logger as { info: (msg: string) => void; debug: (msg: string) => void; warn: (msg: string) => void };
 
   // Step 1: Create initial summary from issue body
   log.info('Creating initial summary from issue body...');
@@ -201,7 +201,7 @@ async function generateContextSummary(
 function applyCommentResult(
   summary: SuggestionSummary,
   result: CommentProcessingResult,
-  log: { debug: (msg: string) => void }
+  log: { debug: (msg: string) => void; warn: (msg: string) => void }
 ): void {
   // Add new contributions
   if (result.newContributions.length > 0) {
@@ -219,7 +219,7 @@ function applyCommentResult(
       contribution.followUps.push(followUp);
       log.debug(`Added follow-up to contribution ${contributionIndex}`);
     } else {
-      log.debug(`Invalid contribution index ${contributionIndex}, must be between 0 and ${summary.contributions.length - 1}, skipping follow-up`);
+      log.warn(`Invalid contribution index ${contributionIndex}, must be between 0 and ${summary.contributions.length - 1}, skipping follow-up`);
     }
   }
 
