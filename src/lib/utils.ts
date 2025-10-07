@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { execSync } from 'child_process';
-import type { IssueRef, Config } from './schemas.js';
+import type { IssueRef, Config, IssueAction } from './schemas.js';
 
 export function parseIssueRef(input: string): IssueRef {
   // Handle URL format: https://github.com/owner/repo/issues/123
@@ -364,4 +364,42 @@ async function findEmbeddingFiles(dir: string): Promise<string[]> {
   }
 
   return result;
+}
+
+/**
+ * Format actions as markdown for human-readable display in action files.
+ * Escapes closing star-slash sequences in comment bodies to avoid breaking the block comment.
+ */
+export function formatActionsAsMarkdown(actions: IssueAction[]): string {
+  const lines: string[] = [];
+
+  for (const action of actions) {
+    switch (action.kind) {
+      case 'add_label':
+        lines.push(`- Add label "${action.label}"`);
+        break;
+      case 'remove_label':
+        lines.push(`- Remove label "${action.label}"`);
+        break;
+      case 'close_issue':
+        lines.push(`- Close issue as ${action.reason === 'completed' ? 'completed' : 'not planned'}`);
+        break;
+      case 'add_comment':
+        lines.push('Post comment:');
+        lines.push('---');
+        // Escape closing star-slash to avoid breaking the block comment
+        const escapedBody = action.body.replace(/\*\//g, '*\\/');
+        lines.push(escapedBody);
+        lines.push('---');
+        break;
+      case 'set_milestone':
+        lines.push(`- Set milestone "${action.milestone}"`);
+        break;
+      case 'assign_user':
+        lines.push(`- Assign to user "${action.user}"`);
+        break;
+    }
+  }
+
+  return lines.join('\n');
 }
