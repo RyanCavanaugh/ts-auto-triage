@@ -20,7 +20,7 @@ export interface FAQEntry {
 export function generateAnchor(title: string): string {
   return title
     .toLowerCase()
-    .replace(/[^\w\s-]/g, '') // Remove special characters except spaces and hyphens
+    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters except spaces, numbers, and hyphens
     .trim()
     .replace(/\s+/g, '-') // Replace spaces with hyphens
     .replace(/-+/g, '-'); // Replace multiple hyphens with single hyphen
