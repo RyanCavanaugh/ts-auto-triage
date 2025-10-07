@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, escapeTextForPrompt } from '../lib/utils.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, SuggestionSummarySchema, type IssueRef, type GitHubIssue, type Config, type SuggestionSummary } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, SuggestionSummarySchema, CommentProcessingResultSchema, type IssueRef, type GitHubIssue, type Config, type SuggestionSummary, type CommentProcessingResult } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -71,7 +71,10 @@ async function processSuggestion(
   config: Config,
   logger: unknown
 ): Promise<SuggestionSummary> {
-  const aiWrapper = ai as { structuredCompletion: <T>(messages: Array<{ role: string; content: string }>, schema: unknown, options?: { maxTokens?: number; context?: string }) => Promise<T> };
+  const aiWrapper = ai as { 
+    structuredCompletion: <T>(messages: Array<{ role: string; content: string }>, schema: unknown, options?: { maxTokens?: number; context?: string }) => Promise<T>;
+    chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string }) => Promise<{ content: string }>;
+  };
   const log = logger as { info: (msg: string) => void; debug: (msg: string) => void };
 
   // Step 1: Create initial summary from issue body
@@ -86,7 +89,7 @@ async function processSuggestion(
     body: escapeTextForPrompt(body),
   });
 
-  let currentSummary = await aiWrapper.structuredCompletion<SuggestionSummary>(
+  const currentSummary: SuggestionSummary = await aiWrapper.structuredCompletion<SuggestionSummary>(
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: initialPrompt },
@@ -100,38 +103,141 @@ async function processSuggestion(
 
   log.debug(`Initial summary created with ${currentSummary.contributions.length} contributions`);
 
-  // Step 2: Iterate through comments, refining the summary
+  // Step 2: Process each comment incrementally
   for (let i = 0; i < issue.comments.length; i++) {
     const comment = issue.comments[i]!;
     log.info(`Processing comment ${i + 1}/${issue.comments.length} by ${comment.user.login}...`);
 
+    // Generate contextual summary of OP + prior 3 comments
+    const contextSummary = await generateContextSummary(
+      aiWrapper,
+      issue,
+      i,
+      config,
+      `Context for comment ${i + 1} in ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`
+    );
+
+    // Process the comment with context
     const commentBody = comment.body.slice(0, config.github.maxCommentLength);
     
-    const refinePrompt = await loadPrompt('resummarize-suggestion-refine', {
-      currentSummary: JSON.stringify(currentSummary, null, 2),
+    const contributionsSummary = currentSummary.contributions
+      .map((c, idx) => `${idx}: ${c.body.slice(0, 100)}... (by ${c.contributedBy.join(', ')})`)
+      .join('\n');
+
+    const processPrompt = await loadPrompt('resummarize-suggestion-process-comment', {
+      contextSummary: escapeTextForPrompt(contextSummary),
+      currentSuggestion: escapeTextForPrompt(currentSummary.suggestion),
+      contributionCount: String(currentSummary.contributions.length),
+      contributionsSummary: escapeTextForPrompt(contributionsSummary || '(none yet)'),
+      currentConcerns: escapeTextForPrompt(currentSummary.concerns ?? '(none yet)'),
       commentNumber: String(i + 1),
       commentAuthor: comment.user.login,
       authorAssociation: comment.author_association,
       commentBody: escapeTextForPrompt(commentBody),
     });
 
-    currentSummary = await aiWrapper.structuredCompletion<SuggestionSummary>(
+    const result = await aiWrapper.structuredCompletion<CommentProcessingResult>(
       [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: refinePrompt },
+        { role: 'user', content: processPrompt },
       ],
-      SuggestionSummarySchema,
+      CommentProcessingResultSchema,
       {
-        maxTokens: 3000,
-        context: `Refine summary with comment ${i + 1} for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
+        maxTokens: 2000,
+        context: `Process comment ${i + 1} for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
       }
     );
+
+    // Apply the incremental updates to the current summary
+    applyCommentResult(currentSummary, result, log);
 
     log.debug(`Updated summary now has ${currentSummary.contributions.length} contributions`);
   }
 
   log.info('Summary refinement complete');
   return currentSummary;
+}
+
+// Generate a brief contextual summary of the OP and prior 3 comments
+async function generateContextSummary(
+  aiWrapper: { chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string }) => Promise<{ content: string }> },
+  issue: GitHubIssue,
+  currentCommentIndex: number,
+  config: Config,
+  context: string
+): Promise<string> {
+  const opBody = issue.body ? issue.body.slice(0, config.github.maxIssueBodyLength) : '';
+  
+  // Get prior 3 comments (or fewer if not available)
+  const startIndex = Math.max(0, currentCommentIndex - 3);
+  const priorComments = issue.comments.slice(startIndex, currentCommentIndex);
+  
+  const priorCommentsText = priorComments
+    .map((c, idx) => {
+      const body = c.body.slice(0, config.github.maxCommentLength);
+      return `Comment ${startIndex + idx + 1} by ${c.user.login} (${c.author_association}):\n${body}`;
+    })
+    .join('\n\n---\n\n');
+
+  const contextPrompt = await loadPrompt('resummarize-suggestion-context', {
+    issueTitle: escapeTextForPrompt(issue.title),
+    opAuthor: issue.user.login,
+    opBody: escapeTextForPrompt(opBody),
+    priorComments: escapeTextForPrompt(priorCommentsText || '(no prior comments)'),
+  });
+
+  const response = await aiWrapper.chatCompletion(
+    [{ role: 'user', content: contextPrompt }],
+    {
+      maxTokens: 500,
+      context,
+    }
+  );
+  
+  return response.content;
+}
+
+// Apply incremental updates from comment processing to the accumulated summary
+function applyCommentResult(
+  summary: SuggestionSummary,
+  result: CommentProcessingResult,
+  log: { debug: (msg: string) => void }
+): void {
+  // Add new contributions
+  if (result.newContributions.length > 0) {
+    summary.contributions.push(...result.newContributions);
+    log.debug(`Added ${result.newContributions.length} new contribution(s)`);
+  }
+
+  // Add follow-ups to existing contributions
+  for (const { contributionIndex, followUp } of result.newFollowUps) {
+    if (contributionIndex >= 0 && contributionIndex < summary.contributions.length) {
+      const contribution = summary.contributions[contributionIndex]!;
+      if (!contribution.followUps) {
+        contribution.followUps = [];
+      }
+      contribution.followUps.push(followUp);
+      log.debug(`Added follow-up to contribution ${contributionIndex}`);
+    } else {
+      log.debug(`Invalid contribution index ${contributionIndex}, skipping follow-up`);
+    }
+  }
+
+  // Append new concerns
+  if (result.newConcerns) {
+    if (summary.concerns) {
+      summary.concerns += '\n\n' + result.newConcerns;
+    } else {
+      summary.concerns = result.newConcerns;
+    }
+    log.debug('Added new concerns');
+  }
+
+  // Update suggestion description if provided
+  if (result.suggestionUpdate) {
+    summary.suggestion = result.suggestionUpdate;
+    log.debug('Updated suggestion description');
+  }
 }
 
 function generateMarkdown(summary: SuggestionSummary, issue: GitHubIssue, issueRef: IssueRef): string {
