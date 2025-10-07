@@ -117,6 +117,7 @@ export const ConfigSchema = z.object({
     rateLimitRetryDelay: z.number(),
     maxRetries: z.number(),
     faqUrl: z.string(),
+    bots: z.array(z.string()),
   }),
   ai: z.object({
     maxReproAttempts: z.number(),

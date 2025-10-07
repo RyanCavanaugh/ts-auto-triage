@@ -19,7 +19,8 @@
     "maxCommentLength": 2000,
     "rateLimitRetryDelay": 5000,
     "maxRetries": 3,
-    "faqUrl": "https://github.com/microsoft/TypeScript/wiki/FAQ"
+    "faqUrl": "https://github.com/microsoft/TypeScript/wiki/FAQ",
+    "bots": ["typescript-bot"]
   },
   "ai": {
     "maxReproAttempts": 3,
