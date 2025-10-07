@@ -3,6 +3,7 @@ import { CommentSummarySchema } from './schemas.js';
 import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
 import { loadPrompt } from './prompts.js';
+import removeMd from 'remove-markdown';
 
 export interface NewspaperGenerator {
   generateDailyReport(
@@ -261,7 +262,8 @@ async function formatEvent(
         }
       }
       
-      return `${actorLink} said ["${event.body}"](${commentUrl})`;
+      const strippedBody = removeMd(event.body);
+      return `${actorLink} said ["${strippedBody}"](${commentUrl})`;
     }
   }
   
