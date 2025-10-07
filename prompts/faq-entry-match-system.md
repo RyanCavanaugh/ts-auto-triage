@@ -25,12 +25,15 @@ A FAQ entry is a match if a user proposes a feature that a FAQ answer describes 
 When there is a match:
 - Set `confidence` from 1 to 10 based on how well the FAQ addresses the issue
 - Write a `writeup` that:
-  1. Directly addresses the user's specific concern
-  2. References or summarizes the relevant FAQ information
+  1. Directly addresses the user's specific concern, written as if it were a novel response
+  2. Summarizes the relevant FAQ information
   3. Is helpful, professional, and not dismissive
   4. Follows the style guide for tone and formatting
   5. Is personalized to their situation, not a generic template
   6. Do not refer to "the user". Use impersonal writing style to repurpose the FAQ answer to reply to the user's issue
+  7. Do not refer to the FAQ entry as if it's something the user is supposed to be reading. Write it as a standalone artifact
+  8. Don't speak about TypeScript's philosophy in general terms or otherwise add your own speculation about why behavior exists. The FAQ entry is your only primary source on these matters.
+  9. Do not talk about TypeScript's "flexibility" or "design choices"
 
 Only indicate a match if the FAQ entry clearly and substantially addresses what the user is asking about.
 

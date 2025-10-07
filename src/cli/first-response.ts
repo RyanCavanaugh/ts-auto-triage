@@ -140,8 +140,10 @@ async function main() {
       // Merge FAQ responses and duplicate detection into a single comment
       let combinedComment = '';
 
+      combinedComment += `🤖 Thank you for your issue! I've done some analysis to help get you started. This response is automatically generated; feel free to 👍 or 👎 this comment according to its usefulness.\n\n`;
+
       if (faqMatches.length > 0) {
-        combinedComment += '## FAQ Responses\n\n';
+        combinedComment += '## Possible Relevant FAQs\n\n';
         
         for (const match of faqMatches) {
           if (match.url) {
@@ -159,7 +161,7 @@ async function main() {
         }
         combinedComment += `## Similar Issues\n\n`;
         combinedComment += `Here are the most similar issues I found:\n\n${similarIssues.map(s => `- ${s}`).join('\n')}\n\n`;
-        combinedComment += `If your issue is a duplicate of one of these, please close this issue. Otherwise, no action is needed. Thanks!\n`;
+        combinedComment += `If your issue is a duplicate of one of these, feel free to close this issue. Otherwise, no action is needed. Thanks!\n`;
       }
 
       logger.info('Creating combined response action');
