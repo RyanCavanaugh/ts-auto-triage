@@ -23,7 +23,8 @@ interface ActionItem {
 
 export function createNewspaperGenerator(
   ai: AIWrapper,
-  logger: Logger
+  logger: Logger,
+  bots: string[] = []
 ): NewspaperGenerator {
   return {
     async generateDailyReport(
@@ -88,7 +89,8 @@ export function createNewspaperGenerator(
           startTime,
           endTime,
           ai,
-          logger
+          logger,
+          bots
         );
         
         issueSummaries.push(summary.text);
@@ -116,7 +118,8 @@ async function buildIssueSummary(
   startTime: Date,
   endTime: Date,
   ai: AIWrapper,
-  logger: Logger
+  logger: Logger,
+  bots: string[]
 ): Promise<{ text: string; actions: ActionItem[] }> {
   const issueUrl = `https://github.com/${issueRef.owner}/${issueRef.repo}/${issue.is_pull_request ? 'pull' : 'issues'}/${issueRef.number}`;
   const issueType = issue.is_pull_request ? 'Pull Request' : 'Issue';
@@ -176,7 +179,7 @@ async function buildIssueSummary(
   // Format prior events
   for (const event of eventsBeforeWindow) {
     const timeDesc = getTimeDescription(event.date, reportDate);
-    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, false);
+    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, false, bots);
     if (formatted) {
       markdown += ` * ${formatted}\n`;
     }
@@ -185,7 +188,7 @@ async function buildIssueSummary(
   // Format events in window
   for (const event of eventsInWindow) {
     const timeDesc = getTimeDescription(event.date, reportDate);
-    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, true);
+    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, true, bots);
     if (formatted) {
       markdown += ` * ${formatted}\n`;
     }
@@ -202,7 +205,8 @@ async function formatEvent(
   actions: ActionItem[],
   ai: AIWrapper,
   logger: Logger,
-  checkForActions: boolean
+  checkForActions: boolean,
+  bots: string[]
 ): Promise<string | null> {
   const actorName = `**${event.actor}**`;
   
@@ -215,6 +219,7 @@ async function formatEvent(
   } else if (event.type === 'commented' && event.body) {
     const authorAssociation = event.author_association ?? 'NONE';
     const isContributorOrOwner = authorAssociation === 'CONTRIBUTOR' || authorAssociation === 'OWNER' || authorAssociation === 'MEMBER';
+    const isBot = bots.includes(event.actor);
     const commentUrl = event.comment_id ? `${issueUrl}#issuecomment-${event.comment_id}` : issueUrl;
     
     if (event.body.length > 200 || event.body.includes('\n')) {
@@ -222,7 +227,7 @@ async function formatEvent(
       try {
         const summary = await summarizeComment(event.body, event.actor, ai, logger);
         
-        if (checkForActions && summary.action_needed && !isContributorOrOwner) {
+        if (checkForActions && summary.action_needed && !isContributorOrOwner && !isBot) {
           actions.push({
             category: summary.action_needed.category,
             description: summary.action_needed.reason,
@@ -239,7 +244,7 @@ async function formatEvent(
       }
     } else {
       // Short comment - include verbatim
-      if (checkForActions && !isContributorOrOwner) {
+      if (checkForActions && !isContributorOrOwner && !isBot) {
         try {
           const summary = await summarizeComment(event.body, event.actor, ai, logger);
           if (summary.action_needed) {

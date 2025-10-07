@@ -190,5 +190,99 @@ describe('NewspaperGenerator', () => {
       // Should show "today" for future dates
       expect(report).toContain('(today)');
     });
+
+    it('should filter bot comments from generating action items', async () => {
+      // Mock AI that returns action needed for all comments
+      const mockAIWithActions: AIWrapper = {
+        chatCompletion: async () => ({ content: '', usage: { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 } }),
+        structuredCompletion: async () => ({ 
+          summary: 'asked a question',
+          action_needed: {
+            category: 'response' as const,
+            reason: '@commenter asked about release timeline'
+          }
+        }),
+        getEmbedding: async () => ({ embedding: [], usage: { total_tokens: 0, prompt_tokens: 0 } }),
+      } as unknown as AIWrapper;
+      
+      const generator = createNewspaperGenerator(mockAIWithActions, mockLogger, ['typescript-bot']);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [
+          {
+            id: 1,
+            body: 'Bot comment that would trigger action',
+            user: {
+              login: 'typescript-bot',
+              id: 2,
+              type: 'Bot',
+            },
+            created_at: '2024-01-02T20:00:00Z',
+            updated_at: '2024-01-02T20:00:00Z',
+            author_association: 'NONE',
+            reactions: {},
+          },
+          {
+            id: 2,
+            body: 'User comment that should trigger action',
+            user: {
+              login: 'regular-user',
+              id: 3,
+              type: 'User',
+            },
+            created_at: '2024-01-02T21:00:00Z',
+            updated_at: '2024-01-02T21:00:00Z',
+            author_association: 'NONE',
+            reactions: {},
+          },
+        ],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Report should include both comments
+      expect(report).toContain('typescript-bot');
+      expect(report).toContain('regular-user');
+      
+      // But only the regular user should trigger an action (check via action items section)
+      // The bot comment should NOT appear in the action items section
+      expect(report).toContain('## Recommended Actions');
+      expect(report).toContain('regular-user');
+      // The report should have exactly 1 action item (not 2)
+      const actionMatches = report.match(/\* Response Recommended/g);
+      expect(actionMatches).toHaveLength(1);
+    });
   });
 });
