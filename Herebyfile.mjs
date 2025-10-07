@@ -237,5 +237,15 @@ export const twoslash = task({
     },
 });
 
+export const makeNews = task({
+    name: "make-news",
+    description: "Generate newspaper reports for the last 7 days",
+    dependencies: [build],
+    run: async () => {
+        const repoRef = getRepoRefFromArgs('make-news');
+        await execa("node", ["dist/cli/make-news.js", repoRef], { stdio: "inherit" });
+    },
+});
+
 // Default task - build
 export default build;
