@@ -39,6 +39,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^20.19.11",
+    "@types/remove-markdown": "^0.3.4",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "@typescript/native-preview": "^7.0.0-dev.20251003.1",
@@ -56,6 +57,7 @@
     "@octokit/rest": "^20.0.0",
     "jsonc-parser": "^3.2.0",
     "openai": "^5.13.1",
+    "remove-markdown": "^0.6.2",
     "zod": "^3.22.0"
   }
 }
