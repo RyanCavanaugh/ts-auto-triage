@@ -89,7 +89,7 @@ async function processSuggestion(
     body: escapeTextForPrompt(body),
   });
 
-  const currentSummary: SuggestionSummary = await aiWrapper.structuredCompletion<SuggestionSummary>(
+  const currentSummary = await aiWrapper.structuredCompletion<SuggestionSummary>(
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: initialPrompt },
@@ -211,7 +211,7 @@ function applyCommentResult(
 
   // Add follow-ups to existing contributions
   for (const { contributionIndex, followUp } of result.newFollowUps) {
-    if (contributionIndex >= 0 && contributionIndex < summary.contributions.length) {
+    if (Number.isInteger(contributionIndex) && contributionIndex >= 0 && contributionIndex < summary.contributions.length) {
       const contribution = summary.contributions[contributionIndex]!;
       if (!contribution.followUps) {
         contribution.followUps = [];
@@ -219,7 +219,7 @@ function applyCommentResult(
       contribution.followUps.push(followUp);
       log.debug(`Added follow-up to contribution ${contributionIndex}`);
     } else {
-      log.debug(`Invalid contribution index ${contributionIndex}, skipping follow-up`);
+      log.debug(`Invalid contribution index ${contributionIndex}, must be between 0 and ${summary.contributions.length - 1}, skipping follow-up`);
     }
   }
 
