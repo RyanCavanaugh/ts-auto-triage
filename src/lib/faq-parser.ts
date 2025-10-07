@@ -7,6 +7,23 @@ export interface FAQEntry {
   title: string;
   /** The full content of the FAQ entry including the title */
   content: string;
+  /** The GitHub-style anchor for this FAQ entry */
+  anchor: string;
+}
+
+/**
+ * Convert a FAQ title to a GitHub-style anchor
+ * GitHub anchors: lowercase, replace spaces with hyphens, remove special chars except hyphens
+ * @param title The FAQ entry title
+ * @returns The anchor string (without the # prefix)
+ */
+export function generateAnchor(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '') // Remove special characters except spaces and hyphens
+    .trim()
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-'); // Replace multiple hyphens with single hyphen
 }
 
 /**
@@ -33,6 +50,7 @@ export function parseFAQ(faqContent: string): FAQEntry[] {
       entries.push({
         title,
         content: `### ${section}`,
+        anchor: generateAnchor(title),
       });
     }
   }
