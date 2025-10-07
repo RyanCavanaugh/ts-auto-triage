@@ -39,7 +39,7 @@ async function main() {
 
     // Create AI wrapper and newspaper generator
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
-    const newspaperGenerator = createNewspaperGenerator(ai, logger);
+    const newspaperGenerator = createNewspaperGenerator(ai, logger, config.github.bots);
 
     // Calculate date range: last 7 days starting yesterday
     // Each "day" is 8 AM Seattle time to 8 AM Seattle time next day
