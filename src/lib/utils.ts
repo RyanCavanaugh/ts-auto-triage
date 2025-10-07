@@ -76,7 +76,10 @@ export function stripMarkdown(text: string): string {
   result = result.replace(/~~(.*?)~~/g, '$1');
   
   // Remove bold and italic - iterate until no more matches to handle nested formatting
+  // Add a safety limit to prevent infinite loops with malformed markdown
   let prevResult;
+  let iterations = 0;
+  const maxIterations = 10;
   do {
     prevResult = result;
     // Process bold (** or __)
@@ -85,7 +88,8 @@ export function stripMarkdown(text: string): string {
     // Process italic (* or _)
     result = result.replace(/\*(.*?)\*/g, '$1');
     result = result.replace(/_(.*?)_/g, '$1');
-  } while (result !== prevResult);
+    iterations++;
+  } while (result !== prevResult && iterations < maxIterations);
   
   // Remove headers
   result = result.replace(/^#{1,6}\s+/gm, '');
