@@ -54,6 +54,7 @@ export function truncateText(text: string, maxLength: number): string {
 /**
  * Strips markdown formatting from text, leaving only plain text content.
  * Removes common markdown syntax like bold, italic, links, code blocks, etc.
+ * Uses an iterative approach to handle nested markdown correctly.
  */
 export function stripMarkdown(text: string): string {
   let result = text;
@@ -74,18 +75,17 @@ export function stripMarkdown(text: string): string {
   // Remove strikethrough
   result = result.replace(/~~(.*?)~~/g, '$1');
   
-  // Remove bold and italic - process multiple times to handle nesting
-  // Process bold (** or __) first
-  for (let i = 0; i < 3; i++) {
-    result = result.replace(/\*\*([^*]+)\*\*/g, '$1');
-    result = result.replace(/__([^_]+)__/g, '$1');
-  }
-  
-  // Then process italic (* or _)
-  for (let i = 0; i < 3; i++) {
-    result = result.replace(/\*([^*]+)\*/g, '$1');
-    result = result.replace(/_([^_]+)_/g, '$1');
-  }
+  // Remove bold and italic - iterate until no more matches to handle nested formatting
+  let prevResult;
+  do {
+    prevResult = result;
+    // Process bold (** or __)
+    result = result.replace(/\*\*(.*?)\*\*/g, '$1');
+    result = result.replace(/__(.*?)__/g, '$1');
+    // Process italic (* or _)
+    result = result.replace(/\*(.*?)\*/g, '$1');
+    result = result.replace(/_(.*?)_/g, '$1');
+  } while (result !== prevResult);
   
   // Remove headers
   result = result.replace(/^#{1,6}\s+/gm, '');

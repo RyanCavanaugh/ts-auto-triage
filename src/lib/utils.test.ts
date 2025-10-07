@@ -311,5 +311,21 @@ describe('Utils', () => {
       const result = stripMarkdown('  Text with spaces  ');
       expect(result).toBe('Text with spaces');
     });
+
+    it('should handle bold text containing single asterisks', () => {
+      const result = stripMarkdown('**text with * asterisk**');
+      expect(result).toBe('text with * asterisk');
+    });
+
+    it('should handle bold text containing underscores (italic markers)', () => {
+      // Note: single underscores are italic markers in markdown, so they get stripped
+      const result = stripMarkdown('__text_with_underscores__');
+      expect(result).toBe('textwithunderscores');
+    });
+
+    it('should handle deeply nested markdown', () => {
+      const result = stripMarkdown('***very bold and italic***');
+      expect(result).toBe('very bold and italic');
+    });
   });
 });
