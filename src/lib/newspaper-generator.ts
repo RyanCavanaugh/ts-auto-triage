@@ -178,7 +178,7 @@ async function buildIssueSummary(
     const timeDesc = getTimeDescription(event.date, reportDate);
     const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, false);
     if (formatted) {
-      markdown += ` * (${timeDesc}) ${formatted}\n`;
+      markdown += ` * ${formatted}\n`;
     }
   }
   
@@ -187,7 +187,7 @@ async function buildIssueSummary(
     const timeDesc = getTimeDescription(event.date, reportDate);
     const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, true);
     if (formatted) {
-      markdown += ` * (${timeDesc}) ${formatted}\n`;
+      markdown += ` * ${formatted}\n`;
     }
   }
   
@@ -204,14 +204,14 @@ async function formatEvent(
   logger: Logger,
   checkForActions: boolean
 ): Promise<string | null> {
-  const actorLink = `[@${event.actor}](https://github.com/${event.actor})`;
+  const actorName = `**${event.actor}**`;
   
   if (event.type === 'created') {
-    return `created by ${actorLink}`;
+    return `created by ${actorName}`;
   } else if (event.type === 'closed') {
-    return `${actorLink} closed the issue`;
+    return `${actorName} closed the issue`;
   } else if (event.type === 'reopened') {
-    return `${actorLink} reopened the issue`;
+    return `${actorName} reopened the issue`;
   } else if (event.type === 'commented' && event.body) {
     const authorAssociation = event.author_association ?? 'NONE';
     const isContributorOrOwner = authorAssociation === 'CONTRIBUTOR' || authorAssociation === 'OWNER' || authorAssociation === 'MEMBER';
@@ -232,10 +232,10 @@ async function formatEvent(
           });
         }
         
-        return `[${actorLink} ${summary.summary}](${commentUrl})`;
+        return `[${timeDesc}](${commentUrl}) ${actorName} ${summary.summary}`;
       } catch (error) {
         logger.warn(`Failed to summarize comment: ${error}`);
-        return `[${actorLink} commented](${commentUrl})`;
+        return `[${actorName} commented](${commentUrl})`;
       }
     } else {
       // Short comment - include verbatim
@@ -255,8 +255,8 @@ async function formatEvent(
           logger.warn(`Failed to check comment for action: ${error}`);
         }
       }
-      
-      return `${actorLink} said ["${event.body}"](${commentUrl})`;
+
+      return `[${timeDesc}](${commentUrl}) ${actorName} said "${event.body}"`;
     }
   }
   
