@@ -89,6 +89,10 @@ async function main() {
           const updatedAt = new Date(issue.updated_at);
           if (updatedAt >= startTime) {
             const issueNumber = parseInt(issueFile.split('/').pop()!.replace('.json', ''), 10);
+            if (isNaN(issueNumber)) {
+              logger.warn(`Failed to parse issue number from filename: ${issueFile}`);
+              continue;
+            }
             const ref: IssueRef = { owner, repo, number: issueNumber };
             relevantIssues.push({ ref, issue });
           }

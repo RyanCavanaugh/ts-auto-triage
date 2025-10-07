@@ -297,6 +297,11 @@ function getTimeDescription(eventDate: Date, reportDate: Date): string {
   const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
   const daysDiff = Math.floor((reportDateOnly.getTime() - eventDateOnly.getTime()) / msPerDay);
   
+  // Handle future dates (negative daysDiff) - treat as today
+  if (daysDiff < 0) {
+    return 'today';
+  }
+  
   if (daysDiff === 0) {
     return 'today';
   } else if (daysDiff === 1) {
