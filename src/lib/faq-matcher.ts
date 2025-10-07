@@ -1,8 +1,8 @@
 import { readFile } from 'fs/promises';
 import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
-import type { IssueRef, FAQResponse, FAQEntryCheck, FAQEntryWriteup } from './schemas.js';
-import { FAQResponseSchema, FAQEntryCheckSchema, FAQEntryWriteupSchema } from './schemas.js';
+import type { IssueRef, FAQEntryCheck, FAQEntryWriteup } from './schemas.js';
+import { FAQEntryCheckSchema, FAQEntryWriteupSchema } from './schemas.js';
 import { loadPrompt } from './prompts.js';
 import { parseFAQ, type FAQEntry } from './faq-parser.js';
 
