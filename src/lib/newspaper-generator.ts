@@ -7,17 +7,10 @@ import { loadPrompt } from './prompts.js';
 export interface NewspaperGenerator {
   generateDailyReport(
     date: Date,
-    issues: Array<{ ref: IssueRef; issue: GitHubIssue; timeline: TimelineEvent[] }>,
+    issues: Array<{ ref: IssueRef; issue: GitHubIssue }>,
     startTime: Date,
     endTime: Date
   ): Promise<string>;
-}
-
-interface EventWithContext {
-  event: TimelineEvent;
-  issueRef: IssueRef;
-  issueTitle: string;
-  isPullRequest: boolean;
 }
 
 interface ActionItem {
@@ -35,93 +28,65 @@ export function createNewspaperGenerator(
   return {
     async generateDailyReport(
       date: Date,
-      issues: Array<{ ref: IssueRef; issue: GitHubIssue; timeline: TimelineEvent[] }>,
+      issues: Array<{ ref: IssueRef; issue: GitHubIssue }>,
       startTime: Date,
       endTime: Date
     ): Promise<string> {
       logger.info(`Generating newspaper report for ${date.toISOString().split('T')[0]}`);
       
-      // Filter and collect events that happened in the time window
-      const eventsInWindow: EventWithContext[] = [];
+      // Filter issues that have activity in the time window
       const uniqueUsers = new Set<string>();
       const uniqueIssues = new Set<string>();
+      const issuesWithActivity: Array<{ ref: IssueRef; issue: GitHubIssue }> = [];
       
-      for (const { ref, issue, timeline } of issues) {
+      for (const { ref, issue } of issues) {
         const issueKey = `${ref.owner}/${ref.repo}#${ref.number}`;
         
-        for (const event of timeline) {
-          const eventDate = new Date(event.created_at);
-          
-          if (eventDate >= startTime && eventDate < endTime) {
-            eventsInWindow.push({
-              event,
-              issueRef: ref,
-              issueTitle: issue.title,
-              isPullRequest: issue.is_pull_request,
-            });
-            
-            uniqueIssues.add(issueKey);
-            
-            // Track users
-            if (event.actor?.login) {
-              uniqueUsers.add(event.actor.login);
-            }
-            if (event.user?.login) {
-              uniqueUsers.add(event.user.login);
-            }
+        // Check if issue was created in window
+        const createdAt = new Date(issue.created_at);
+        let hasActivity = createdAt >= startTime && createdAt < endTime;
+        
+        // Check if any comments were created in window
+        for (const comment of issue.comments) {
+          const commentDate = new Date(comment.created_at);
+          if (commentDate >= startTime && commentDate < endTime) {
+            hasActivity = true;
+            uniqueUsers.add(comment.user.login);
+          }
+        }
+        
+        // Check if issue was closed in window
+        if (issue.closed_at) {
+          const closedAt = new Date(issue.closed_at);
+          if (closedAt >= startTime && closedAt < endTime) {
+            hasActivity = true;
+          }
+        }
+        
+        if (hasActivity) {
+          issuesWithActivity.push({ ref, issue });
+          uniqueIssues.add(issueKey);
+          if (createdAt >= startTime && createdAt < endTime) {
+            uniqueUsers.add(issue.user.login);
           }
         }
       }
       
-      logger.info(`Found ${eventsInWindow.length} events in time window`);
+      logger.info(`Found ${issuesWithActivity.length} issues with activity in time window`);
       logger.info(`${uniqueUsers.size} unique users, ${uniqueIssues.size} unique issues`);
       
       // Generate action items and summaries
       const actionItems: ActionItem[] = [];
       const issueSummaries: string[] = [];
       
-      // Group events by issue
-      const eventsByIssue = new Map<string, EventWithContext[]>();
-      for (const eventCtx of eventsInWindow) {
-        const key = `${eventCtx.issueRef.owner}/${eventCtx.issueRef.repo}#${eventCtx.issueRef.number}`;
-        if (!eventsByIssue.has(key)) {
-          eventsByIssue.set(key, []);
-        }
-        eventsByIssue.get(key)!.push(eventCtx);
-      }
-      
       // Process each issue
-      for (const [issueKey, events] of eventsByIssue) {
-        const firstEvent = events[0]!;
-        const { issueRef, issueTitle, isPullRequest } = firstEvent;
-        const issue = issues.find(i => 
-          i.ref.owner === issueRef.owner && 
-          i.ref.repo === issueRef.repo && 
-          i.ref.number === issueRef.number
-        )?.issue;
-        
-        if (!issue) continue;
-        
-        // Get prior events (last 3 before time window)
-        const allEventsForIssue = issues.find(i => 
-          i.ref.owner === issueRef.owner && 
-          i.ref.repo === issueRef.repo && 
-          i.ref.number === issueRef.number
-        )?.timeline ?? [];
-        
-        const priorEvents = allEventsForIssue
-          .filter(e => new Date(e.created_at) < startTime)
-          .slice(-3);
-        
-        // Build issue summary
+      for (const { ref, issue } of issuesWithActivity) {
         const summary = await buildIssueSummary(
-          issueRef,
-          issueTitle,
-          isPullRequest,
-          priorEvents,
-          events,
+          ref,
           issue,
           date,
+          startTime,
+          endTime,
           ai,
           logger
         );
@@ -146,122 +111,155 @@ export function createNewspaperGenerator(
 
 async function buildIssueSummary(
   issueRef: IssueRef,
-  issueTitle: string,
-  isPullRequest: boolean,
-  priorEvents: TimelineEvent[],
-  currentEvents: EventWithContext[],
   issue: GitHubIssue,
   reportDate: Date,
+  startTime: Date,
+  endTime: Date,
   ai: AIWrapper,
   logger: Logger
 ): Promise<{ text: string; actions: ActionItem[] }> {
-  const issueUrl = `https://github.com/${issueRef.owner}/${issueRef.repo}/${isPullRequest ? 'pull' : 'issues'}/${issueRef.number}`;
-  const issueType = isPullRequest ? 'Pull Request' : 'Issue';
+  const issueUrl = `https://github.com/${issueRef.owner}/${issueRef.repo}/${issue.is_pull_request ? 'pull' : 'issues'}/${issueRef.number}`;
+  const issueType = issue.is_pull_request ? 'Pull Request' : 'Issue';
   
   let markdown = `### [${issueType} ${issueRef.owner}/${issueRef.repo}#${issueRef.number}](${issueUrl})\n\n`;
   
-  const allEvents = [...priorEvents, ...currentEvents.map(e => e.event)];
   const actions: ActionItem[] = [];
   
-  // Coalesce label events
-  const labelChanges = new Map<string, { added: string[]; removed: string[] }>();
-  const nonLabelEvents: TimelineEvent[] = [];
+  // Collect all events (issue creation + comments + state changes)
+  interface Event {
+    date: Date;
+    type: 'created' | 'commented' | 'closed' | 'reopened';
+    actor: string;
+    body?: string;
+    author_association?: string;
+    comment_id?: number;
+  }
   
-  for (const event of allEvents) {
-    if (event.event === 'labeled' && event.label) {
-      const date = new Date(event.created_at).toISOString().split('T')[0]!;
-      if (!labelChanges.has(date)) {
-        labelChanges.set(date, { added: [], removed: [] });
-      }
-      labelChanges.get(date)!.added.push(event.label.name);
-    } else if (event.event === 'unlabeled' && event.label) {
-      const date = new Date(event.created_at).toISOString().split('T')[0]!;
-      if (!labelChanges.has(date)) {
-        labelChanges.set(date, { added: [], removed: [] });
-      }
-      labelChanges.get(date)!.removed.push(event.label.name);
-    } else {
-      nonLabelEvents.push(event);
+  const allEvents: Event[] = [];
+  
+  // Add issue creation
+  allEvents.push({
+    date: new Date(issue.created_at),
+    type: 'created',
+    actor: issue.user.login,
+  });
+  
+  // Add comments
+  for (const comment of issue.comments) {
+    allEvents.push({
+      date: new Date(comment.created_at),
+      type: 'commented',
+      actor: comment.user.login,
+      body: comment.body,
+      author_association: comment.author_association,
+      comment_id: comment.id,
+    });
+  }
+  
+  // Add closed event if applicable
+  if (issue.closed_at) {
+    allEvents.push({
+      date: new Date(issue.closed_at),
+      type: issue.state === 'closed' ? 'closed' : 'reopened',
+      actor: 'unknown', // We don't have this info in the cached data
+    });
+  }
+  
+  // Sort by date
+  allEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
+  
+  // Find events before the window (last 3)
+  const eventsBeforeWindow = allEvents.filter(e => e.date < startTime).slice(-3);
+  const eventsInWindow = allEvents.filter(e => e.date >= startTime && e.date < endTime);
+  
+  // Format prior events
+  for (const event of eventsBeforeWindow) {
+    const timeDesc = getTimeDescription(event.date, reportDate);
+    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, false);
+    if (formatted) {
+      markdown += ` * (${timeDesc}) ${formatted}\n`;
     }
   }
   
-  // Format events
-  for (const event of nonLabelEvents) {
-    const eventDate = new Date(event.created_at);
-    const timeDesc = getTimeDescription(eventDate, reportDate);
-    const actor = event.actor?.login ?? event.user?.login ?? 'unknown';
+  // Format events in window
+  for (const event of eventsInWindow) {
+    const timeDesc = getTimeDescription(event.date, reportDate);
+    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, true);
+    if (formatted) {
+      markdown += ` * (${timeDesc}) ${formatted}\n`;
+    }
+  }
+  
+  return { text: markdown, actions };
+}
+
+async function formatEvent(
+  event: { date: Date; type: string; actor: string; body?: string; author_association?: string; comment_id?: number },
+  issueUrl: string,
+  timeDesc: string,
+  issueRef: IssueRef,
+  actions: ActionItem[],
+  ai: AIWrapper,
+  logger: Logger,
+  checkForActions: boolean
+): Promise<string | null> {
+  const actorLink = `[@${event.actor}](https://github.com/${event.actor})`;
+  
+  if (event.type === 'created') {
+    return `created by ${actorLink}`;
+  } else if (event.type === 'closed') {
+    return `${actorLink} closed the issue`;
+  } else if (event.type === 'reopened') {
+    return `${actorLink} reopened the issue`;
+  } else if (event.type === 'commented' && event.body) {
+    const authorAssociation = event.author_association ?? 'NONE';
+    const isContributorOrOwner = authorAssociation === 'CONTRIBUTOR' || authorAssociation === 'OWNER' || authorAssociation === 'MEMBER';
+    const commentUrl = event.comment_id ? `${issueUrl}#issuecomment-${event.comment_id}` : issueUrl;
     
-    // Check if this is a comment that needs summarization
-    if (event.event === 'commented' && event.body) {
-      const authorAssociation = event.author_association ?? 'NONE';
-      const isContributorOrOwner = authorAssociation === 'CONTRIBUTOR' || authorAssociation === 'OWNER' || authorAssociation === 'MEMBER';
-      
-      if (event.body.length > 200 || event.body.includes('\n')) {
-        // Use AI to summarize long comments
+    if (event.body.length > 200 || event.body.includes('\n')) {
+      // Use AI to summarize long comments
+      try {
+        const summary = await summarizeComment(event.body, event.actor, ai, logger);
+        
+        if (checkForActions && summary.action_needed && !isContributorOrOwner) {
+          actions.push({
+            category: summary.action_needed.category,
+            description: summary.action_needed.reason,
+            issueRef,
+            issueNumber: issueRef.number,
+            issueUrl: commentUrl,
+          });
+        }
+        
+        return `[${actorLink} ${summary.summary}](${commentUrl})`;
+      } catch (error) {
+        logger.warn(`Failed to summarize comment: ${error}`);
+        return `[${actorLink} commented](${commentUrl})`;
+      }
+    } else {
+      // Short comment - include verbatim
+      if (checkForActions && !isContributorOrOwner) {
         try {
-          const summary = await summarizeComment(event.body, actor, ai, logger);
-          markdown += ` * (${timeDesc}) [@${actor}](https://github.com/${actor}) ${summary.summary}\n`;
-          
-          if (summary.action_needed && !isContributorOrOwner) {
+          const summary = await summarizeComment(event.body, event.actor, ai, logger);
+          if (summary.action_needed) {
             actions.push({
               category: summary.action_needed.category,
               description: summary.action_needed.reason,
               issueRef,
               issueNumber: issueRef.number,
-              issueUrl: event.html_url ?? issueUrl,
+              issueUrl: commentUrl,
             });
           }
         } catch (error) {
-          logger.warn(`Failed to summarize comment: ${error}`);
-          markdown += ` * (${timeDesc}) [@${actor}](https://github.com/${actor}) commented\n`;
-        }
-      } else {
-        // Short comment - include verbatim
-        markdown += ` * (${timeDesc}) [@${actor}](https://github.com/${actor}) said "${event.body}"\n`;
-        
-        if (!isContributorOrOwner) {
-          try {
-            const summary = await summarizeComment(event.body, actor, ai, logger);
-            if (summary.action_needed) {
-              actions.push({
-                category: summary.action_needed.category,
-                description: summary.action_needed.reason,
-                issueRef,
-                issueNumber: issueRef.number,
-                issueUrl: event.html_url ?? issueUrl,
-              });
-            }
-          } catch (error) {
-            logger.warn(`Failed to check comment for action: ${error}`);
-          }
+          logger.warn(`Failed to check comment for action: ${error}`);
         }
       }
-    } else {
-      // Format other event types
-      const eventDesc = formatEvent(event, actor, issueUrl);
-      if (eventDesc) {
-        markdown += ` * (${timeDesc}) ${eventDesc}\n`;
-      }
+      
+      return `${actorLink} said ["${event.body}"](${commentUrl})`;
     }
   }
   
-  // Add coalesced label events
-  for (const [date, changes] of labelChanges) {
-    const parts: string[] = [];
-    if (changes.added.length > 0) {
-      parts.push(`added ${changes.added.map(l => `\`${l}\``).join(', ')}`);
-    }
-    if (changes.removed.length > 0) {
-      parts.push(`removed ${changes.removed.map(l => `\`${l}\``).join(', ')}`);
-    }
-    if (parts.length > 0) {
-      const labelDate = new Date(date);
-      const timeDesc = getTimeDescription(labelDate, reportDate);
-      markdown += ` * (${timeDesc}) labels ${parts.join(' and ')}\n`;
-    }
-  }
-  
-  return { text: markdown, actions };
+  return null;
 }
 
 async function summarizeComment(
@@ -291,53 +289,6 @@ async function summarizeComment(
   );
   
   return response;
-}
-
-function formatEvent(event: TimelineEvent, actor: string, issueUrl: string): string | null {
-  const actorLink = `[@${actor}](https://github.com/${actor})`;
-  
-  switch (event.event) {
-    case 'created':
-      return `created by ${actorLink}`;
-    case 'closed':
-      return `${actorLink} closed the issue`;
-    case 'reopened':
-      return `${actorLink} reopened the issue`;
-    case 'assigned':
-      return `${actorLink} assigned to [@${event.assignee?.login ?? 'unknown'}](https://github.com/${event.assignee?.login ?? 'unknown'})`;
-    case 'unassigned':
-      return `${actorLink} unassigned [@${event.assignee?.login ?? 'unknown'}](https://github.com/${event.assignee?.login ?? 'unknown'})`;
-    case 'milestoned':
-      return `${actorLink} added to milestone "${event.milestone?.title ?? 'unknown'}"`;
-    case 'demilestoned':
-      return `${actorLink} removed from milestone "${event.milestone?.title ?? 'unknown'}"`;
-    case 'renamed':
-      return `${actorLink} renamed from "${event.rename?.from ?? ''}" to "${event.rename?.to ?? ''}"`;
-    case 'review_requested':
-      return `${actorLink} requested reviews`;
-    case 'reviewed':
-      return `${actorLink} reviewed the PR`;
-    case 'review_dismissed':
-      return `${actorLink} dismissed a review`;
-    case 'approved':
-      return `${actorLink} approved the PR`;
-    case 'merged':
-      return `${actorLink} merged the PR`;
-    case 'referenced':
-      return `${actorLink} referenced this issue`;
-    case 'mentioned':
-      return `${actorLink} was mentioned`;
-    case 'subscribed':
-      return `${actorLink} subscribed`;
-    case 'unsubscribed':
-      return `${actorLink} unsubscribed`;
-    case 'locked':
-      return `${actorLink} locked the conversation`;
-    case 'unlocked':
-      return `${actorLink} unlocked the conversation`;
-    default:
-      return null;
-  }
 }
 
 function getTimeDescription(eventDate: Date, reportDate: Date): string {

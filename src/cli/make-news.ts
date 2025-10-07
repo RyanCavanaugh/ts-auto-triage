@@ -4,14 +4,9 @@ import { readFile, writeFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
 import { 
-  parseIssueRef, 
   createConsoleLogger, 
-  getGitHubAuthToken, 
-  createAuthenticatedOctokit,
   ensureDirectoryExists,
 } from '../lib/utils.js';
-import { createIssueFetcher } from '../lib/issue-fetcher.js';
-import { createTimelineFetcher } from '../lib/timeline-fetcher.js';
 import { createNewspaperGenerator } from '../lib/newspaper-generator.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, type IssueRef, type GitHubIssue } from '../lib/schemas.js';
@@ -42,13 +37,7 @@ async function main() {
     const configContent = await readFile('config.jsonc', 'utf-8');
     const config = ConfigSchema.parse(jsonc.parse(configContent));
 
-    // Create authenticated Octokit client
-    const authToken = getGitHubAuthToken();
-    const octokit = await createAuthenticatedOctokit();
-    
-    // Create necessary utilities
-    const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
-    const timelineFetcher = createTimelineFetcher(octokit, logger);
+    // Create AI wrapper and newspaper generator
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
     const newspaperGenerator = createNewspaperGenerator(ai, logger);
 
@@ -89,7 +78,7 @@ async function main() {
       }
       
       // Load and filter issues
-      const relevantIssues: Array<{ ref: IssueRef; issue: GitHubIssue; timeline: Array<{ created_at: string; event: string }> }> = [];
+      const relevantIssues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [];
       
       for (const issueFile of issueFiles) {
         try {
@@ -101,14 +90,7 @@ async function main() {
           if (updatedAt >= startTime) {
             const issueNumber = parseInt(issueFile.split('/').pop()!.replace('.json', ''), 10);
             const ref: IssueRef = { owner, repo, number: issueNumber };
-            
-            // Fetch timeline for this issue
-            try {
-              const timeline = await timelineFetcher.fetchTimeline(ref);
-              relevantIssues.push({ ref, issue, timeline });
-            } catch (error) {
-              logger.warn(`Failed to fetch timeline for ${owner}/${repo}#${issueNumber}: ${error}`);
-            }
+            relevantIssues.push({ ref, issue });
           }
         } catch (error) {
           logger.warn(`Failed to process issue file ${issueFile}: ${error}`);

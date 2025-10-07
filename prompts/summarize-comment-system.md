@@ -16,6 +16,9 @@ For response, check if the comment:
 
 Return a JSON object with:
 - summary: A brief third-person summary starting with a verb
-- action_needed: null if no action needed, or an object with category and reason
+- action_needed: null if no action needed, or an object with category ('moderation' or 'response') and reason (a description that can be used as-is in the report)
 
-Comments from CONTRIBUTOR, OWNER, or MEMBER roles never need moderation or response.
+The reason should be in the format suitable for the newspaper, like:
+- "@username posted rude content"
+- "@username asked about whether a fix would be in the next release"
+- "@username provided repro steps as requested"
