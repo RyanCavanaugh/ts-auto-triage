@@ -122,6 +122,7 @@ async function buildIssueSummary(
   const issueType = issue.is_pull_request ? 'Pull Request' : 'Issue';
   
   let markdown = `### [${issueType} ${issueRef.owner}/${issueRef.repo}#${issueRef.number}](${issueUrl})\n\n`;
+  markdown += `**${issue.title}**\n\n`;
   
   const actions: ActionItem[] = [];
   
@@ -296,6 +297,11 @@ function getTimeDescription(eventDate: Date, reportDate: Date): string {
   const reportDateOnly = new Date(reportDate.getFullYear(), reportDate.getMonth(), reportDate.getDate());
   const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
   const daysDiff = Math.floor((reportDateOnly.getTime() - eventDateOnly.getTime()) / msPerDay);
+  
+  // Handle future dates (negative daysDiff) - treat as today
+  if (daysDiff < 0) {
+    return 'today';
+  }
   
   if (daysDiff === 0) {
     return 'today';

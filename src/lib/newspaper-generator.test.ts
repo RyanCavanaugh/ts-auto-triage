@@ -78,6 +78,7 @@ describe('NewspaperGenerator', () => {
       
       expect(report).toContain('1 different users commented on 1 different issues');
       expect(report).toContain('test/repo#1');
+      expect(report).toContain('**Test Issue**');
       expect(report).toContain('created by [@testuser]');
     });
 
@@ -139,6 +140,55 @@ describe('NewspaperGenerator', () => {
       expect(report).toContain('1 different users commented on 1 different issues');
       expect(report).toContain('[@commenter]');
       expect(report).toContain('Short comment');
+    });
+
+    it('should handle events with dates in the future (negative day diff)', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      // Report date is 2024-01-02, but event is on 2024-01-03 (future)
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-03T12:00:00Z', // Future relative to reportDate
+        updated_at: '2024-01-03T12:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Should not contain negative days like "(-1 days ago)"
+      expect(report).not.toContain('(-');
+      expect(report).not.toContain('-1 days ago');
+      // Should show "today" for future dates
+      expect(report).toContain('(today)');
     });
   });
 });
