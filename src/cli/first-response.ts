@@ -214,8 +214,11 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
   const currentEmbedding = await ai.getEmbedding(cappedText, undefined, `Get embedding for current issue ${issueKey}`);
 
+  // Get current issue's summaries for later use
+  const currentIssueSummaries = summaries[issueKey] ?? [];
+
   // Calculate similarities by finding and reading all embedding files
-  const similarities: Array<{ issueKey: string; similarity: number; summary: string }> = [];
+  const similarities: Array<{ issueKey: string; similarity: number; summary: string; summaryIndex: number; currentSummaryIndex: number }> = [];
 
   // Recursively find all .embeddings.json files in .data directory
   const embeddingFiles = await findEmbeddingFiles('.data');
@@ -242,10 +245,12 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
     const embeddingList: string[] = JSON.parse(embeddingContent);
 
     let bestSim = -Infinity;
-    let bestIndex = -1;
+    let bestSummaryIndex = -1;
+    let bestCurrentSummaryIndex = -1;
 
-    for (let i = 0; i < embeddingList.length; i++) {
-      const base64 = embeddingList[i]!;
+    // Compare against all combinations of current and other issue summaries
+    for (let otherIdx = 0; otherIdx < embeddingList.length; otherIdx++) {
+      const base64 = embeddingList[otherIdx]!;
       const embeddingArray = embeddingFromBase64(base64);
 
       // Use optimized Float32Array similarity calculation
@@ -254,14 +259,22 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
 
       if (similarity > bestSim) {
         bestSim = similarity;
-        bestIndex = i;
+        bestSummaryIndex = otherIdx;
+        bestCurrentSummaryIndex = 0; // We only have one embedding for current issue
       }
     }
 
     // Use the best similarity for the issue and the corresponding summary (if available)
-    if (bestIndex >= 0) {
+    if (bestSummaryIndex >= 0) {
       const summariesForKey = summaries[fileIssueKey];
-      similarities.push({ issueKey: fileIssueKey, similarity: bestSim, summary: '' });
+      const matchedSummary = summariesForKey?.[bestSummaryIndex] ?? '';
+      similarities.push({ 
+        issueKey: fileIssueKey, 
+        similarity: bestSim, 
+        summary: matchedSummary,
+        summaryIndex: bestSummaryIndex,
+        currentSummaryIndex: bestCurrentSummaryIndex
+      });
     }
   }
 
@@ -278,11 +291,44 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
 
   const HIGH_SIMILARITY_THRESHOLD = 0.7; // Threshold for high similarity emoji
 
-  return top5.map(s => {
+  // Load issue data to get titles
+  const formattedIssues: string[] = [];
+  for (const s of top5) {
     const emoji = s.similarity >= HIGH_SIMILARITY_THRESHOLD ? '🔥 ' : '';
     const percentage = Math.round(s.similarity * 100);
-    return `${emoji}#${s.issueKey.split('#')[1]} (${percentage}% similar): ${s.summary.slice(0, 200)}...`;
-  });
+    
+    // Parse issue key to get owner/repo/number
+    const parts = s.issueKey.split('/');
+    const owner = parts[0]!;
+    const repoAndNumber = parts[1]!.split('#');
+    const repo = repoAndNumber[0]!;
+    const number = repoAndNumber[1]!;
+
+    // Try to load issue data to get the title
+    let issueTitle = 'Unknown Title';
+    try {
+      const issueFilePath = `.data/${owner}/${repo}/${number}.json`;
+      const issueContent = await readFile(issueFilePath, 'utf-8');
+      const issue = GitHubIssueSchema.parse(JSON.parse(issueContent));
+      issueTitle = issue.title;
+    } catch {
+      // If we can't load the issue, use a placeholder
+      issueTitle = 'Issue';
+    }
+
+    // Create redirect.github.com URL
+    const redirectUrl = `https://redirect.github.com/${owner}/${repo}/issues/${number}`;
+    
+    // Get the summaries
+    const currentSummary = currentIssueSummaries[s.currentSummaryIndex] ?? 'No summary available';
+    const similarIssueSummary = s.summary || 'No summary available';
+
+    // Format the output
+    const formattedIssue = `${emoji}[#${number} - ${issueTitle}](${redirectUrl}) (${percentage}% similar)\n   * This issue: ${currentSummary}\n   * Your issue: ${similarIssueSummary}`;
+    formattedIssues.push(formattedIssue);
+  }
+
+  return formattedIssues;
 }
 
 /**

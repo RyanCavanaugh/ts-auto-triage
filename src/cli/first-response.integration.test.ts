@@ -141,10 +141,10 @@ This is a test FAQ entry that addresses the user's question.
       mockIssueRef
     );
 
-    // Simulate similar issues
+    // Simulate similar issues with new format
     const similarIssues = [
-      '🔥 #42 (85% similar): Similar issue about XYZ',
-      '#123 (65% similar): Another related issue',
+      '🔥 [#42 - Trade-offs in Control Flow Analysis](https://redirect.github.com/test-owner/test-repo/issues/42) (85% similar)\n   * This issue: Discusses how narrowing and indirect function calls work\n   * Your issue: Similar issue about XYZ',
+      '[#123 - Another Issue Title](https://redirect.github.com/test-owner/test-repo/issues/123) (65% similar)\n   * This issue: Describes callback behavior\n   * Your issue: Another related issue',
     ];
 
     // Build merged comment
@@ -173,8 +173,11 @@ This is a test FAQ entry that addresses the user's question.
     expect(combinedComment).toContain('This FAQ entry addresses your concern');
     expect(combinedComment).toContain('---');
     expect(combinedComment).toContain('## Similar Issues');
-    expect(combinedComment).toContain('🔥 #42');
-    expect(combinedComment).toContain('#123');
+    expect(combinedComment).toContain('🔥 [#42');
+    expect(combinedComment).toContain('[#123');
+    expect(combinedComment).toContain('redirect.github.com');
+    expect(combinedComment).toContain('This issue:');
+    expect(combinedComment).toContain('Your issue:');
     expect(combinedComment).toContain('Please check if any of these resolve your issue');
   });
 
@@ -202,8 +205,8 @@ This does not match the issue.
 
     expect(faqMatches).toHaveLength(0);
 
-    // Simulate similar issues
-    const similarIssues = ['#100 (70% similar): Related issue'];
+    // Simulate similar issues with new format
+    const similarIssues = ['[#100 - Related Issue](https://redirect.github.com/test-owner/test-repo/issues/100) (70% similar)\n   * This issue: Current issue summary\n   * Your issue: Related issue'];
 
     // Build merged comment
     let combinedComment = '';
@@ -224,7 +227,8 @@ This does not match the issue.
     // Should only have similar issues section
     expect(combinedComment).not.toContain('## FAQ Responses');
     expect(combinedComment).toContain('## Similar Issues');
-    expect(combinedComment).toContain('#100');
+    expect(combinedComment).toContain('[#100');
+    expect(combinedComment).toContain('redirect.github.com');
   });
 
   test('should sort FAQ matches by confidence descending', async () => {
