@@ -56,32 +56,52 @@ export function truncateText(text: string, maxLength: number): string {
  * Removes common markdown syntax like bold, italic, links, code blocks, etc.
  */
 export function stripMarkdown(text: string): string {
-  return text
-    // Remove code blocks (``` or ~~~)
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/~~~[\s\S]*?~~~/g, '')
-    // Remove inline code
-    .replace(/`([^`]+)`/g, '$1')
-    // Remove images: ![alt](url)
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    // Remove links but keep text: [text](url)
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Remove bold/italic (**, __, *, _)
-    .replace(/(\*\*|__)(.*?)\1/g, '$2')
-    .replace(/(\*|_)(.*?)\1/g, '$2')
-    // Remove strikethrough
-    .replace(/~~(.*?)~~/g, '$1')
-    // Remove headers
-    .replace(/^#{1,6}\s+/gm, '')
-    // Remove blockquotes
-    .replace(/^>\s+/gm, '')
-    // Remove horizontal rules
-    .replace(/^[-*_]{3,}\s*$/gm, '')
-    // Remove list markers (-, *, +, 1.)
-    .replace(/^[\s]*[-*+]\s+/gm, '')
-    .replace(/^[\s]*\d+\.\s+/gm, '')
-    // Trim excessive whitespace
-    .trim();
+  let result = text;
+  
+  // Remove code blocks (``` or ~~~)
+  result = result.replace(/```[\s\S]*?```/g, '');
+  result = result.replace(/~~~[\s\S]*?~~~/g, '');
+  
+  // Remove inline code
+  result = result.replace(/`([^`]+)`/g, '$1');
+  
+  // Remove images: ![alt](url)
+  result = result.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
+  
+  // Remove links but keep text: [text](url)
+  result = result.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  
+  // Remove strikethrough
+  result = result.replace(/~~(.*?)~~/g, '$1');
+  
+  // Remove bold and italic - process multiple times to handle nesting
+  // Process bold (** or __) first
+  for (let i = 0; i < 3; i++) {
+    result = result.replace(/\*\*([^*]+)\*\*/g, '$1');
+    result = result.replace(/__([^_]+)__/g, '$1');
+  }
+  
+  // Then process italic (* or _)
+  for (let i = 0; i < 3; i++) {
+    result = result.replace(/\*([^*]+)\*/g, '$1');
+    result = result.replace(/_([^_]+)_/g, '$1');
+  }
+  
+  // Remove headers
+  result = result.replace(/^#{1,6}\s+/gm, '');
+  
+  // Remove blockquotes
+  result = result.replace(/^>\s+/gm, '');
+  
+  // Remove horizontal rules
+  result = result.replace(/^[-*_]{3,}\s*$/gm, '');
+  
+  // Remove list markers (-, *, +, 1.)
+  result = result.replace(/^[\s]*[-*+]\s+/gm, '');
+  result = result.replace(/^[\s]*\d+\.\s+/gm, '');
+  
+  // Trim excessive whitespace
+  return result.trim();
 }
 
 /**
