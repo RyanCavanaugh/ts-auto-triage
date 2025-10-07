@@ -141,6 +141,32 @@ Execute proposed actions for an issue (adds labels, comments, etc.).
 hereby exec-action -- Microsoft/TypeScript#9998
 ```
 
+### Reporting Tasks
+
+#### `hereby make-news -- <owner/repo>`
+
+Generate newspaper reports for the last 7 days of issue activity. Creates daily markdown reports in `.reports/` directory with:
+- Executive summary of activity
+- Recommended actions (moderation/response needed)
+- Chronological activity summaries for each issue
+
+Each day starts and ends at 8 AM Seattle time. Reports include:
+- Issues created
+- Comments posted (AI-summarized if long)
+- Issue state changes
+- Action items for moderators and maintainers
+
+**Example:**
+```bash
+hereby make-news -- Microsoft/TypeScript
+```
+
+**Output:**
+- Creates files in `.reports/` named by date (e.g., `2025-01-15.md`)
+- Each report covers a 24-hour period from 8 AM Seattle time to 8 AM Seattle time the next day
+- AI analyzes comments for spam, rudeness, and response needs
+- Comments from contributors/owners are excluded from action recommendations
+
 ### Testing and Validation Tasks
 
 #### `hereby twoslash -- <filename.md> <command> [--cwd <directory>]`
