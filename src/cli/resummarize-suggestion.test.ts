@@ -2,7 +2,8 @@ import { describe, expect, test } from '@jest/globals';
 import { 
   SuggestionSummarySchema,
   ContributionSchema,
-  FollowUpSchema
+  FollowUpSchema,
+  CommentProcessingResultSchema
 } from '../lib/schemas.js';
 
 describe('Suggestion Resummarization schemas', () => {
@@ -90,5 +91,72 @@ describe('Suggestion Resummarization schemas', () => {
 
     const result = SuggestionSummarySchema.safeParse(summary);
     expect(result.success).toBe(false);
+  });
+});
+
+describe('Comment processing result schema', () => {
+  test('should validate CommentProcessingResultSchema with all fields', () => {
+    const result = {
+      newContributions: [
+        {
+          body: 'This would help with type inference',
+          contributedBy: ['user1']
+        }
+      ],
+      newFollowUps: [
+        {
+          contributionIndex: 0,
+          followUp: {
+            body: 'I agree, this is useful',
+            contributedBy: ['user2']
+          }
+        }
+      ],
+      newConcerns: 'This might have performance implications',
+      suggestionUpdate: 'Updated suggestion description'
+    };
+
+    const parseResult = CommentProcessingResultSchema.safeParse(result);
+    expect(parseResult.success).toBe(true);
+    expect(parseResult.data?.newContributions).toHaveLength(1);
+    expect(parseResult.data?.newFollowUps).toHaveLength(1);
+    expect(parseResult.data?.newConcerns).toBe('This might have performance implications');
+    expect(parseResult.data?.suggestionUpdate).toBe('Updated suggestion description');
+  });
+
+  test('should validate CommentProcessingResultSchema with empty arrays and nulls', () => {
+    const result = {
+      newContributions: [],
+      newFollowUps: [],
+      newConcerns: null,
+      suggestionUpdate: null
+    };
+
+    const parseResult = CommentProcessingResultSchema.safeParse(result);
+    expect(parseResult.success).toBe(true);
+    expect(parseResult.data?.newContributions).toHaveLength(0);
+    expect(parseResult.data?.newFollowUps).toHaveLength(0);
+    expect(parseResult.data?.newConcerns).toBeNull();
+    expect(parseResult.data?.suggestionUpdate).toBeNull();
+  });
+
+  test('should reject invalid contributionIndex', () => {
+    const result = {
+      newContributions: [],
+      newFollowUps: [
+        {
+          contributionIndex: 'invalid', // should be number
+          followUp: {
+            body: 'Test',
+            contributedBy: ['user1']
+          }
+        }
+      ],
+      newConcerns: null,
+      suggestionUpdate: null
+    };
+
+    const parseResult = CommentProcessingResultSchema.safeParse(result);
+    expect(parseResult.success).toBe(false);
   });
 });

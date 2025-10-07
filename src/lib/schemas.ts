@@ -297,3 +297,16 @@ export const SuggestionSummarySchema = z.object({
 });
 
 export type SuggestionSummary = z.infer<typeof SuggestionSummarySchema>;
+
+// Schema for incremental comment processing - returns only what to append/add
+export const CommentProcessingResultSchema = z.object({
+  newContributions: z.array(ContributionSchema),
+  newFollowUps: z.array(z.object({
+    contributionIndex: z.number(), // which existing contribution to add this follow-up to
+    followUp: FollowUpSchema,
+  })),
+  newConcerns: z.union([z.string(), z.null()]), // Additional concerns to append (or null if none)
+  suggestionUpdate: z.union([z.string(), z.null()]), // Updated suggestion description (or null if no update)
+});
+
+export type CommentProcessingResult = z.infer<typeof CommentProcessingResultSchema>;
