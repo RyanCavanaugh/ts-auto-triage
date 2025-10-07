@@ -425,11 +425,11 @@ In other words, there is no distinction made between `.d.ts` files which are "yo
 
 In general it's not correct to have a `.d.ts` file be a user-authored input to your program - even if a file only contains types, it should still be `.ts` so that it *produces* a `.d.ts` in the output for downstream consumers to use.
 
-### Circularity Errors *May* Occur In The Presence of Circularities
+### TS7022 Circularity Errors *May* Occur In The Presence of Circularities
 
 During the depth-first process of typechecking, TypeScript may encounter an apparent circularity in logic, e.g. it determines that `X` should be assignable to `Y` if `X` is assignable to `Y`. When this happens, you'll see an error:
 
-> 'foo' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer
+> TS7022: 'foo' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer
 
 Due to the complexity of the checking process and caching, it's sometimes possible for a circularity error to occur in some situations but not others. If a codebase has a circularity in checking, that error *may* be issued, but it's also possible that you may be able to cause the error to go away by pre-doing part of the cycle elsewhere.
 

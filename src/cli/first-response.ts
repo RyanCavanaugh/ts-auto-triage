@@ -155,7 +155,7 @@ async function main() {
         }
         combinedComment += `## Similar Issues\n\n`;
         combinedComment += `Here are the most similar issues I found:\n\n${similarIssues.map(s => `- ${s}`).join('\n')}\n\n`;
-        combinedComment += `Please check if any of these resolve your issue before proceeding.\n`;
+        combinedComment += `If your issue is a duplicate of one of these, please close this issue. Otherwise, no action is needed. Thanks!\n`;
       }
 
       logger.info('Creating combined response action');
@@ -320,11 +320,8 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
     // Create redirect.github.com URL
     const redirectUrl = `https://redirect.github.com/${owner}/${repo}/issues/${number}`;
     
-    // Get the summaries
-    const currentSummary = currentIssueSummaries[s.currentSummaryIndex] ?? 'No summary available';
-
     // Format the output
-    const formattedIssue = `[#${number} - ${issueTitle}](${redirectUrl}) (${percentage}% similar)\n   * ${currentSummary}\n`;
+    const formattedIssue = `(${percentage}%) [#${number} - ${issueTitle}](${redirectUrl}) - ${s.summary}\n`;
     formattedIssues.push(formattedIssue);
   }
 
