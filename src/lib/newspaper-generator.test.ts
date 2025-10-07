@@ -190,5 +190,69 @@ describe('NewspaperGenerator', () => {
       // Should show "today" for future dates
       expect(report).toContain('(today)');
     });
+
+    it('should strip markdown from short-form verbatim comments', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [
+          {
+            id: 1,
+            body: 'This is **bold** and *italic* with [link](url) and `code`',
+            user: {
+              login: 'commenter',
+              id: 2,
+              type: 'User',
+            },
+            created_at: '2024-01-02T20:00:00Z',
+            updated_at: '2024-01-02T20:00:00Z',
+            author_association: 'NONE',
+            reactions: {},
+          },
+        ],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // The comment should be stripped of markdown
+      expect(report).toContain('This is bold and italic with link and code');
+      // Should not contain markdown formatting
+      expect(report).not.toContain('**bold**');
+      expect(report).not.toContain('*italic*');
+      expect(report).not.toContain('[link](url)');
+      expect(report).not.toContain('`code`');
+    });
   });
 });

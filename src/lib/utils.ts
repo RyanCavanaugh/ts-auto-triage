@@ -52,6 +52,39 @@ export function truncateText(text: string, maxLength: number): string {
 }
 
 /**
+ * Strips markdown formatting from text, leaving only plain text content.
+ * Removes common markdown syntax like bold, italic, links, code blocks, etc.
+ */
+export function stripMarkdown(text: string): string {
+  return text
+    // Remove code blocks (``` or ~~~)
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/~~~[\s\S]*?~~~/g, '')
+    // Remove inline code
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove images: ![alt](url)
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    // Remove links but keep text: [text](url)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove bold/italic (**, __, *, _)
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    // Remove strikethrough
+    .replace(/~~(.*?)~~/g, '$1')
+    // Remove headers
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove blockquotes
+    .replace(/^>\s+/gm, '')
+    // Remove horizontal rules
+    .replace(/^[-*_]{3,}\s*$/gm, '')
+    // Remove list markers (-, *, +, 1.)
+    .replace(/^[\s]*[-*+]\s+/gm, '')
+    .replace(/^[\s]*\d+\.\s+/gm, '')
+    // Trim excessive whitespace
+    .trim();
+}
+
+/**
  * Escapes special characters in text to prevent JSON parsing errors.
  * This is needed when text will be embedded in prompts that are later JSON-stringified.
  * Handles backslashes, quotes, newlines, and other control characters.

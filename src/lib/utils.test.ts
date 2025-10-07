@@ -1,4 +1,4 @@
-import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, formatActionsAsMarkdown } from './utils.js';
+import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, formatActionsAsMarkdown, stripMarkdown } from './utils.js';
 import type { IssueAction } from './schemas.js';
 
 describe('Utils', () => {
@@ -207,6 +207,109 @@ describe('Utils', () => {
       const result = formatActionsAsMarkdown(actions);
       expect(result).toBe('Post comment:\n---\nFirst *\\/ and second *\\/ sequence\n---');
       expect(result).not.toContain('*/');
+    });
+  });
+
+  describe('stripMarkdown', () => {
+    it('should strip bold markdown (**)', () => {
+      const result = stripMarkdown('This is **bold** text');
+      expect(result).toBe('This is bold text');
+    });
+
+    it('should strip bold markdown (__)', () => {
+      const result = stripMarkdown('This is __bold__ text');
+      expect(result).toBe('This is bold text');
+    });
+
+    it('should strip italic markdown (*)', () => {
+      const result = stripMarkdown('This is *italic* text');
+      expect(result).toBe('This is italic text');
+    });
+
+    it('should strip italic markdown (_)', () => {
+      const result = stripMarkdown('This is _italic_ text');
+      expect(result).toBe('This is italic text');
+    });
+
+    it('should strip inline code', () => {
+      const result = stripMarkdown('Use the `console.log()` function');
+      expect(result).toBe('Use the console.log() function');
+    });
+
+    it('should strip links but keep text', () => {
+      const result = stripMarkdown('Check [this link](https://example.com) for details');
+      expect(result).toBe('Check this link for details');
+    });
+
+    it('should strip images but keep alt text', () => {
+      const result = stripMarkdown('Here is an image: ![alt text](image.png)');
+      expect(result).toBe('Here is an image: alt text');
+    });
+
+    it('should strip code blocks', () => {
+      const result = stripMarkdown('Text before\n```javascript\nconst x = 1;\n```\nText after');
+      expect(result).toBe('Text before\n\nText after');
+    });
+
+    it('should strip strikethrough', () => {
+      const result = stripMarkdown('This is ~~strikethrough~~ text');
+      expect(result).toBe('This is strikethrough text');
+    });
+
+    it('should strip headers', () => {
+      const result = stripMarkdown('# Header 1\n## Header 2\n### Header 3');
+      expect(result).toBe('Header 1\nHeader 2\nHeader 3');
+    });
+
+    it('should strip blockquotes', () => {
+      const result = stripMarkdown('> This is a quote\n> Another line');
+      expect(result).toBe('This is a quote\nAnother line');
+    });
+
+    it('should strip unordered list markers', () => {
+      const result = stripMarkdown('- Item 1\n* Item 2\n+ Item 3');
+      expect(result).toBe('Item 1\nItem 2\nItem 3');
+    });
+
+    it('should strip ordered list markers', () => {
+      const result = stripMarkdown('1. First item\n2. Second item');
+      expect(result).toBe('First item\nSecond item');
+    });
+
+    it('should strip horizontal rules', () => {
+      const result = stripMarkdown('Text before\n---\nText after');
+      expect(result).toBe('Text before\n\nText after');
+    });
+
+    it('should handle plain text without markdown', () => {
+      const result = stripMarkdown('This is plain text');
+      expect(result).toBe('This is plain text');
+    });
+
+    it('should handle empty string', () => {
+      const result = stripMarkdown('');
+      expect(result).toBe('');
+    });
+
+    it('should handle complex markdown with multiple formats', () => {
+      const result = stripMarkdown('**Bold** and *italic* with [link](url) and `code`');
+      expect(result).toBe('Bold and italic with link and code');
+    });
+
+    it('should strip markdown from a realistic GitHub comment', () => {
+      const comment = 'Thanks for the report! Please check the [documentation](https://example.com) and run `npm install` to fix this issue.';
+      const result = stripMarkdown(comment);
+      expect(result).toBe('Thanks for the report! Please check the documentation and run npm install to fix this issue.');
+    });
+
+    it('should handle nested markdown formatting', () => {
+      const result = stripMarkdown('**Bold with *italic* inside**');
+      expect(result).toBe('Bold with italic inside');
+    });
+
+    it('should trim excessive whitespace', () => {
+      const result = stripMarkdown('  Text with spaces  ');
+      expect(result).toBe('Text with spaces');
     });
   });
 });
