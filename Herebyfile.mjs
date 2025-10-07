@@ -65,6 +65,20 @@ function getIssueRefFromArgs(taskName) {
     process.exit(1);
 }
 
+// Helper function to extract repository reference from command line arguments
+function getRepoRefFromArgs(taskName) {
+    // Look for argument after -- separator
+    const separatorIndex = process.argv.indexOf('--');
+    if (separatorIndex >= 0 && separatorIndex < process.argv.length - 1) {
+        return process.argv[separatorIndex + 1];
+    }
+    
+    // Fallback: show usage
+    console.error(`Usage: hereby ${taskName} -- <owner/repo>`);
+    console.error(`Example: hereby ${taskName} -- Microsoft/TypeScript`);
+    process.exit(1);
+}
+
 // Dev inspection tasks
 export const firstResponse = task({
     name: "first-response",
@@ -90,6 +104,122 @@ export const getReproSteps = task({
     run: async () => {
         const issueRef = getIssueRefFromArgs('get-repro-steps');
         await execa("node", ["dist/cli/get-repro-steps.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const fetchIssue = task({
+    name: "fetch-issue",
+    description: "Fetch a single issue from GitHub",
+    run: async () => {
+        const issueRef = getIssueRefFromArgs('fetch-issue');
+        await execa("node", ["dist/cli/fetch-issue.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const curateIssue = task({
+    name: "curate-issue",
+    description: "Run AI-powered curation on an issue",
+    run: async () => {
+        const issueRef = getIssueRefFromArgs('curate-issue');
+        await execa("node", ["dist/cli/curate-issue.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const execAction = task({
+    name: "exec-action",
+    description: "Execute proposed actions for an issue",
+    run: async () => {
+        const issueRef = getIssueRefFromArgs('exec-action');
+        await execa("node", ["dist/cli/exec-action.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const resummarizeSuggestion = task({
+    name: "resummarize-suggestion",
+    description: "Extract contributions from suggestion discussions",
+    run: async () => {
+        const issueRef = getIssueRefFromArgs('resummarize-suggestion');
+        await execa("node", ["dist/cli/resummarize-suggestion.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const reproIssue = task({
+    name: "repro-issue",
+    description: "Run old repro extraction logic (deprecated, use static-repro instead)",
+    run: async () => {
+        const issueRef = getIssueRefFromArgs('repro-issue');
+        await execa("node", ["dist/cli/repro-issue.js", issueRef], { stdio: "inherit" });
+    },
+});
+
+export const fetchIssues = task({
+    name: "fetch-issues",
+    description: "Fetch all issues for a repository from GitHub",
+    run: async () => {
+        const repoRef = getRepoRefFromArgs('fetch-issues');
+        await execa("node", ["dist/cli/fetch-issues.js", repoRef], { stdio: "inherit" });
+    },
+});
+
+export const summarizeIssues = task({
+    name: "summarize-issues",
+    description: "Generate AI summaries for all issues in a repository",
+    run: async () => {
+        const repoRef = getRepoRefFromArgs('summarize-issues');
+        await execa("node", ["dist/cli/summarize-issues.js", repoRef], { stdio: "inherit" });
+    },
+});
+
+export const computeEmbeddings = task({
+    name: "compute-embeddings",
+    description: "Compute embeddings for issues in a repository",
+    run: async () => {
+        const repoRef = getRepoRefFromArgs('compute-embeddings');
+        await execa("node", ["dist/cli/compute-embeddings.js", repoRef], { stdio: "inherit" });
+    },
+});
+
+export const checkAi = task({
+    name: "check-ai",
+    description: "Validate Azure OpenAI configuration",
+    run: async () => {
+        await execa("node", ["dist/cli/check-ai.js"], { stdio: "inherit" });
+    },
+});
+
+export const staticRepro = task({
+    name: "static-repro",
+    description: "Run new repro extraction process (with optional --validate flag)",
+    run: async () => {
+        const separatorIndex = process.argv.indexOf('--');
+        if (separatorIndex < 0 || separatorIndex >= process.argv.length - 1) {
+            console.error('Usage: hereby static-repro -- <issue-ref> [--validate]');
+            console.error('Example: hereby static-repro -- Microsoft/TypeScript#9998');
+            console.error('Example: hereby static-repro -- Microsoft/TypeScript#9998 --validate');
+            process.exit(1);
+        }
+        
+        // Get all arguments after --
+        const args = process.argv.slice(separatorIndex + 1);
+        await execa("node", ["dist/cli/static-repro.js", ...args], { stdio: "inherit" });
+    },
+});
+
+export const twoslash = task({
+    name: "twoslash",
+    description: "Run TypeScript LSP testing harness",
+    run: async () => {
+        const separatorIndex = process.argv.indexOf('--');
+        if (separatorIndex < 0 || separatorIndex >= process.argv.length - 2) {
+            console.error('Usage: hereby twoslash -- <filename.md> <command> [--cwd <directory>]');
+            console.error('Commands: signature-help, hover, completions');
+            console.error('Example: hereby twoslash -- example.md hover --cwd /path/to/project');
+            process.exit(1);
+        }
+        
+        // Get all arguments after --
+        const args = process.argv.slice(separatorIndex + 1);
+        await execa("node", ["dist/cli/twoslash.js", ...args], { stdio: "inherit" });
     },
 });
 
