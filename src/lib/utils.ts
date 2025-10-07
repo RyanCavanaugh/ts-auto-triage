@@ -387,7 +387,9 @@ export function formatActionsAsMarkdown(actions: IssueAction[]): string {
       case 'add_comment':
         lines.push('Post comment:');
         lines.push('---');
-        // Escape closing star-slash to avoid breaking the block comment
+        // Escape closing star-slash to avoid breaking the block comment.
+        // We use backslash-escaping (*\/) which is readable but doesn't actually
+        // close the comment block, allowing the markdown to remain inside the /* */ comment.
         const escapedBody = action.body.replace(/\*\//g, '*\\/');
         lines.push(escapedBody);
         lines.push('---');
