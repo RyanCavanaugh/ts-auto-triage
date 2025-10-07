@@ -13,6 +13,8 @@ export interface FAQMatchResult {
   confidence: number;
   /** The tailored writeup for the user */
   writeup: string;
+  /** The full URL to the FAQ entry including anchor */
+  url: string;
 }
 
 /**
@@ -20,11 +22,13 @@ export interface FAQMatchResult {
  * @param ai The AI wrapper for making completions
  * @param logger Logger for debug messages
  * @param faqFilePath Path to the FAQ markdown file (defaults to 'FAQ.md')
+ * @param faqUrl Base URL for the FAQ (e.g., 'https://github.com/microsoft/TypeScript/wiki/FAQ')
  */
 export function createFAQMatcher(
   ai: AIWrapper,
   logger: Logger,
-  faqFilePath: string = 'FAQ.md'
+  faqFilePath: string = 'FAQ.md',
+  faqUrl?: string
 ) {
   return {
     async checkAllFAQMatches(
@@ -66,10 +70,12 @@ export function createFAQMatcher(
           // Unwrap the result from the wrapper object
           const match = response.result;
           if (match.match === 'yes') {
+            const url = faqUrl ? `${faqUrl}#${entry.anchor}` : '';
             matches.push({
               entry,
               confidence: match.confidence,
               writeup: match.writeup,
+              url,
             });
             logger.debug(`FAQ match: ${entry.title} (confidence: ${match.confidence})`);
           }

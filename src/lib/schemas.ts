@@ -116,6 +116,7 @@ export const ConfigSchema = z.object({
     maxCommentLength: z.number(),
     rateLimitRetryDelay: z.number(),
     maxRetries: z.number(),
+    faqUrl: z.string(),
   }),
   ai: z.object({
     maxReproAttempts: z.number(),
