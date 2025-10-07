@@ -3,7 +3,7 @@
 import { readFile, writeFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity, getGitHubAuthToken, createAuthenticatedOctokit } from '../lib/utils.js';
+import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, zodToJsonSchema, embeddingToBase64, embeddingFromBase64, calculateCosineSimilarity, getGitHubAuthToken, createAuthenticatedOctokit, formatActionsAsMarkdown } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, ActionFileSchema, SummariesDataSchema, type IssueRef, type Config } from '../lib/schemas.js';
 import { createFAQMatcher } from '../lib/faq-matcher.js';
@@ -181,7 +181,10 @@ async function main() {
 
       const actionFileContent = `/* Proposed actions for ${formatIssueRef(issueRef)}
    AI-generated first response based on FAQ matching and duplicate detection */
-${JSON.stringify(actionFile, null, 2)}`;
+${JSON.stringify(actionFile, null, 2)}
+/*
+${formatActionsAsMarkdown(actions)}
+*/`;
 
       await writeFile(actionFilePath, actionFileContent);
       await fileLogger.logInfo(`Action file written to ${actionFilePath}`);

@@ -1,4 +1,5 @@
-import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt } from './utils.js';
+import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, formatActionsAsMarkdown } from './utils.js';
+import type { IssueAction } from './schemas.js';
 
 describe('Utils', () => {
   describe('parseIssueRef', () => {
@@ -106,6 +107,106 @@ describe('Utils', () => {
       expect(result).toContain('\\\\');  // backslashes escaped
       expect(result).toContain('\\"');   // quotes escaped
       expect(result).toContain('\\n');   // newlines escaped
+    });
+  });
+
+  describe('formatActionsAsMarkdown', () => {
+    it('should format add_label action', () => {
+      const actions: IssueAction[] = [
+        { kind: 'add_label', label: 'Bug' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('- Add label "Bug"');
+    });
+
+    it('should format remove_label action', () => {
+      const actions: IssueAction[] = [
+        { kind: 'remove_label', label: 'Help wanted' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('- Remove label "Help wanted"');
+    });
+
+    it('should format close_issue action with completed', () => {
+      const actions: IssueAction[] = [
+        { kind: 'close_issue', reason: 'completed' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('- Close issue as completed');
+    });
+
+    it('should format close_issue action with not_planned', () => {
+      const actions: IssueAction[] = [
+        { kind: 'close_issue', reason: 'not_planned' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('- Close issue as not planned');
+    });
+
+    it('should format add_comment action', () => {
+      const actions: IssueAction[] = [
+        { kind: 'add_comment', body: 'This is a test comment' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('Post comment:\n---\nThis is a test comment\n---');
+    });
+
+    it('should escape closing star-slash in comment body', () => {
+      const actions: IssueAction[] = [
+        { kind: 'add_comment', body: 'This has a closing */ sequence' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('Post comment:\n---\nThis has a closing *\\/ sequence\n---');
+      expect(result).not.toContain('*/');
+    });
+
+    it('should format set_milestone action', () => {
+      const actions: IssueAction[] = [
+        { kind: 'set_milestone', milestone: 'v2.0' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('- Set milestone "v2.0"');
+    });
+
+    it('should format assign_user action', () => {
+      const actions: IssueAction[] = [
+        { kind: 'assign_user', user: 'octocat' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('- Assign to user "octocat"');
+    });
+
+    it('should format multiple actions', () => {
+      const actions: IssueAction[] = [
+        { kind: 'add_label', label: 'Bug' },
+        { kind: 'remove_label', label: 'Help wanted' },
+        { kind: 'add_comment', body: 'Thank you for reporting this issue.' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('- Add label "Bug"\n- Remove label "Help wanted"\nPost comment:\n---\nThank you for reporting this issue.\n---');
+    });
+
+    it('should handle empty actions array', () => {
+      const actions: IssueAction[] = [];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('');
+    });
+
+    it('should format multi-line comment body', () => {
+      const actions: IssueAction[] = [
+        { kind: 'add_comment', body: 'Line 1\nLine 2\nLine 3' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('Post comment:\n---\nLine 1\nLine 2\nLine 3\n---');
+    });
+
+    it('should escape multiple closing star-slash sequences', () => {
+      const actions: IssueAction[] = [
+        { kind: 'add_comment', body: 'First */ and second */ sequence' }
+      ];
+      const result = formatActionsAsMarkdown(actions);
+      expect(result).toBe('Post comment:\n---\nFirst *\\/ and second *\\/ sequence\n---');
+      expect(result).not.toContain('*/');
     });
   });
 });
