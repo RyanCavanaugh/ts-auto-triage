@@ -6,6 +6,7 @@ describe('FAQ Response Schema', () => {
   test('should accept response with has_match true and response string', () => {
     const data = {
       has_match: true,
+      reasoning: 'This matches the FAQ entry',
       response: 'This is a response from the FAQ',
     };
 
@@ -20,6 +21,7 @@ describe('FAQ Response Schema', () => {
   test('should accept response with has_match false and response null', () => {
     const data = {
       has_match: false,
+      reasoning: 'No matching FAQ entry found',
       response: null,
     };
 
@@ -35,6 +37,7 @@ describe('FAQ Response Schema', () => {
     // Edge case: has_match is true but response is null
     const data = {
       has_match: true,
+      reasoning: 'Match found but no response available',
       response: null,
     };
 
