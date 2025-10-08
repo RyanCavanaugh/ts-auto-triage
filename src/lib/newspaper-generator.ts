@@ -279,9 +279,12 @@ async function buildIssueSummary(
   const eventsBeforeWindow = allEvents.filter(e => e.date < startTime).slice(-3);
   const eventsInWindow = allEvents.filter(e => e.date >= startTime && e.date < endTime);
   
+  // Metadata event types that should be coalesced
+  const metadataEventTypes = ['labeled', 'unlabeled', 'milestoned', 'demilestoned', 'assigned', 'unassigned'] as const;
+  
   // Helper to check if event is a metadata event
   const isMetadataEvent = (eventType: string): boolean => {
-    return ['labeled', 'unlabeled', 'milestoned', 'demilestoned', 'assigned', 'unassigned'].includes(eventType);
+    return metadataEventTypes.includes(eventType as typeof metadataEventTypes[number]);
   };
   
   // Helper to coalesce consecutive metadata events by same actor
