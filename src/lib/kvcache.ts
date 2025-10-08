@@ -34,10 +34,12 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
         const result = await compute();
 
         // If the computed value is explicitly null, don't create a cache file.
+        // This is used for cache existence checks - we shouldn't log these as cache misses.
         if (result === null) {
           return result;
         }
         
+        // Log cache miss only when we're actually computing and storing a new value
         logger.info(`[Cache miss] ${description}`);
         
         try {
