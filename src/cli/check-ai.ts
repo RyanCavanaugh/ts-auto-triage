@@ -46,7 +46,7 @@ async function main() {
       const chatResp = await ai.chatCompletion(messages, { 
         maxTokens: 20,
         context: 'AI chat completion validation test',
-        effort: 'Low',
+        effort: 'Medium',
       });
       const contentPreview = (chatResp.content || '').replace(/\s+/g, ' ').trim().slice(0, 200);
       logger.info(`Chat test succeeded. Response preview: ${contentPreview}`);
