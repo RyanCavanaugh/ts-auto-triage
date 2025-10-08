@@ -284,5 +284,131 @@ describe('NewspaperGenerator', () => {
       const actionMatches = report.match(/\* Response Recommended/g);
       expect(actionMatches).toHaveLength(1);
     });
+
+    it('should strip markdown from short-form verbatim comments', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-01T00:00:00Z', // Before window
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [
+          {
+            id: 1,
+            body: 'This has **bold** and *italic* and [a link](http://example.com)',
+            user: {
+              login: 'commenter',
+              id: 2,
+              type: 'User',
+            },
+            created_at: '2024-01-02T20:00:00Z', // Within window
+            updated_at: '2024-01-02T20:00:00Z',
+            author_association: 'NONE',
+            reactions: {},
+          },
+        ],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Should not contain markdown syntax
+      expect(report).not.toContain('**bold**');
+      expect(report).not.toContain('*italic*');
+      expect(report).not.toContain('[a link](http://example.com)');
+      
+      // Should contain the plain text version
+      expect(report).toContain('said "This has bold and italic and a link"');
+    });
+
+    it('should strip markdown from comments with code blocks and lists', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-01T00:00:00Z', // Before window
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [
+          {
+            id: 1,
+            body: 'Try using `console.log` for debugging',
+            user: {
+              login: 'commenter',
+              id: 2,
+              type: 'User',
+            },
+            created_at: '2024-01-02T20:00:00Z', // Within window
+            updated_at: '2024-01-02T20:00:00Z',
+            author_association: 'NONE',
+            reactions: {},
+          },
+        ],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Should not contain markdown backticks
+      expect(report).not.toContain('`console.log`');
+      
+      // Should contain the plain text version
+      expect(report).toContain('said "Try using console.log for debugging"');
+    });
   });
 });
