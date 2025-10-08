@@ -66,6 +66,17 @@ export function createNewspaperGenerator(
           }
         }
         
+        // Check if any timeline events happened in window
+        if (issue.timeline_events) {
+          for (const event of issue.timeline_events) {
+            const eventDate = new Date(event.created_at);
+            if (eventDate >= startTime && eventDate < endTime) {
+              hasActivity = true;
+              break;
+            }
+          }
+        }
+        
         if (hasActivity) {
           issuesWithActivity.push({ ref, issue });
           uniqueIssues.add(issueKey);
@@ -268,21 +279,104 @@ async function buildIssueSummary(
   const eventsBeforeWindow = allEvents.filter(e => e.date < startTime).slice(-3);
   const eventsInWindow = allEvents.filter(e => e.date >= startTime && e.date < endTime);
   
+  // Helper to check if event is a metadata event
+  const isMetadataEvent = (eventType: string): boolean => {
+    return ['labeled', 'unlabeled', 'milestoned', 'demilestoned', 'assigned', 'unassigned'].includes(eventType);
+  };
+  
+  // Helper to coalesce consecutive metadata events by same actor
+  const coalesceMetadataEvents = (events: Event[]): Array<Event | Event[]> => {
+    const result: Array<Event | Event[]> = [];
+    let currentGroup: Event[] = [];
+    let currentActor: string | null = null;
+    
+    for (const event of events) {
+      if (isMetadataEvent(event.type)) {
+        if (event.actor === currentActor && currentGroup.length > 0) {
+          // Same actor, add to current group
+          currentGroup.push(event);
+        } else {
+          // Different actor or first event, flush current group and start new one
+          if (currentGroup.length > 0) {
+            if (currentGroup.length === 1) {
+              result.push(currentGroup[0]!);
+            } else {
+              result.push(currentGroup);
+            }
+          }
+          currentGroup = [event];
+          currentActor = event.actor;
+        }
+      } else {
+        // Non-metadata event, flush current group and add this event
+        if (currentGroup.length > 0) {
+          if (currentGroup.length === 1) {
+            result.push(currentGroup[0]!);
+          } else {
+            result.push(currentGroup);
+          }
+          currentGroup = [];
+          currentActor = null;
+        }
+        result.push(event);
+      }
+    }
+    
+    // Flush any remaining group
+    if (currentGroup.length > 0) {
+      if (currentGroup.length === 1) {
+        result.push(currentGroup[0]!);
+      } else {
+        result.push(currentGroup);
+      }
+    }
+    
+    return result;
+  };
+  
   // Format prior events
-  for (const event of eventsBeforeWindow) {
-    const timeDesc = getTimeDescription(event.date, reportDate);
-    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, false, bots);
-    if (formatted) {
-      markdown += ` * ${formatted}\n`;
+  const coalescedEventsBeforeWindow = coalesceMetadataEvents(eventsBeforeWindow);
+  for (const eventOrGroup of coalescedEventsBeforeWindow) {
+    if (Array.isArray(eventOrGroup)) {
+      // Group of metadata events
+      const firstEvent = eventOrGroup[0];
+      if (firstEvent) {
+        const timeDesc = getTimeDescription(firstEvent.date, reportDate);
+        const formatted = formatMetadataEventGroup(eventOrGroup, timeDesc);
+        if (formatted) {
+          markdown += ` * ${formatted}\n`;
+        }
+      }
+    } else {
+      // Single event
+      const timeDesc = getTimeDescription(eventOrGroup.date, reportDate);
+      const formatted = await formatEvent(eventOrGroup, issueUrl, timeDesc, issueRef, actions, ai, logger, false, bots);
+      if (formatted) {
+        markdown += ` * ${formatted}\n`;
+      }
     }
   }
   
   // Format events in window
-  for (const event of eventsInWindow) {
-    const timeDesc = getTimeDescription(event.date, reportDate);
-    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, true, bots);
-    if (formatted) {
-      markdown += ` * ${formatted}\n`;
+  const coalescedEventsInWindow = coalesceMetadataEvents(eventsInWindow);
+  for (const eventOrGroup of coalescedEventsInWindow) {
+    if (Array.isArray(eventOrGroup)) {
+      // Group of metadata events
+      const firstEvent = eventOrGroup[0];
+      if (firstEvent) {
+        const timeDesc = getTimeDescription(firstEvent.date, reportDate);
+        const formatted = formatMetadataEventGroup(eventOrGroup, timeDesc);
+        if (formatted) {
+          markdown += ` * ${formatted}\n`;
+        }
+      }
+    } else {
+      // Single event
+      const timeDesc = getTimeDescription(eventOrGroup.date, reportDate);
+      const formatted = await formatEvent(eventOrGroup, issueUrl, timeDesc, issueRef, actions, ai, logger, true, bots);
+      if (formatted) {
+        markdown += ` * ${formatted}\n`;
+      }
     }
   }
   
@@ -413,15 +507,105 @@ async function summarizeComment(
   return response;
 }
 
+function formatMetadataEventGroup(
+  events: Array<{ 
+    date: Date; 
+    type: string; 
+    actor: string; 
+    label_name?: string;
+    milestone_title?: string;
+    assignee_login?: string;
+  }>,
+  timeDesc: string
+): string {
+  if (events.length === 0) {
+    return '';
+  }
+  
+  const actorName = `**${events[0]!.actor}**`;
+  const parts: string[] = [];
+  
+  // Group by action type to create natural language
+  const addedLabels: string[] = [];
+  const removedLabels: string[] = [];
+  const addedMilestones: string[] = [];
+  const removedMilestones: string[] = [];
+  const assignedUsers: string[] = [];
+  const unassignedUsers: string[] = [];
+  
+  for (const event of events) {
+    if (event.type === 'labeled' && event.label_name) {
+      addedLabels.push(event.label_name);
+    } else if (event.type === 'unlabeled' && event.label_name) {
+      removedLabels.push(event.label_name);
+    } else if (event.type === 'milestoned' && event.milestone_title) {
+      addedMilestones.push(event.milestone_title);
+    } else if (event.type === 'demilestoned' && event.milestone_title) {
+      removedMilestones.push(event.milestone_title);
+    } else if (event.type === 'assigned' && event.assignee_login) {
+      assignedUsers.push(event.assignee_login);
+    } else if (event.type === 'unassigned' && event.assignee_login) {
+      unassignedUsers.push(event.assignee_login);
+    }
+  }
+  
+  // Build natural language description
+  if (addedLabels.length > 0) {
+    const labelList = addedLabels.map(l => `\`${l}\``).join(', ');
+    parts.push(`added ${addedLabels.length === 1 ? 'label' : 'labels'} ${labelList}`);
+  }
+  
+  if (removedLabels.length > 0) {
+    const labelList = removedLabels.map(l => `\`${l}\``).join(', ');
+    parts.push(`removed ${removedLabels.length === 1 ? 'label' : 'labels'} ${labelList}`);
+  }
+  
+  if (addedMilestones.length > 0) {
+    const milestoneList = addedMilestones.map(m => `\`${m}\``).join(', ');
+    parts.push(`set ${addedMilestones.length === 1 ? 'milestone to' : 'milestones to'} ${milestoneList}`);
+  }
+  
+  if (removedMilestones.length > 0) {
+    const milestoneList = removedMilestones.map(m => `\`${m}\``).join(', ');
+    parts.push(`removed from ${removedMilestones.length === 1 ? 'milestone' : 'milestones'} ${milestoneList}`);
+  }
+  
+  if (assignedUsers.length > 0) {
+    const userList = assignedUsers.map(u => `**${u}**`).join(', ');
+    parts.push(`assigned to ${userList}`);
+  }
+  
+  if (unassignedUsers.length > 0) {
+    const userList = unassignedUsers.map(u => `**${u}**`).join(', ');
+    parts.push(`unassigned ${userList}`);
+  }
+  
+  if (parts.length === 0) {
+    return '';
+  }
+  
+  // Join parts with commas and "and" before the last part (Oxford comma)
+  let description: string;
+  if (parts.length === 1) {
+    description = parts[0]!;
+  } else {
+    const lastPart = parts[parts.length - 1]!;
+    const otherParts = parts.slice(0, -1);
+    description = `${otherParts.join(', ')}, and ${lastPart}`;
+  }
+  
+  return `(${timeDesc}) ${actorName} ${description}`;
+}
+
 function getTimeDescription(eventDate: Date, reportDate: Date): string {
   const msPerDay = 24 * 60 * 60 * 1000;
   const reportDateOnly = new Date(reportDate.getFullYear(), reportDate.getMonth(), reportDate.getDate());
   const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
   const daysDiff = Math.floor((reportDateOnly.getTime() - eventDateOnly.getTime()) / msPerDay);
   
-  // Handle future dates (negative daysDiff) - treat as today
+  // Handle future dates (negative daysDiff) - show as "later"
   if (daysDiff < 0) {
-    return 'today';
+    return 'later';
   }
   
   if (daysDiff === 0) {
