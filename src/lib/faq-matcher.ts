@@ -92,7 +92,7 @@ export function createFAQMatcher(
           const writeupResponse = await ai.structuredCompletion(writeupMessages, FAQEntryWriteupSchema, {
             maxTokens: 500,
             context: `Generate FAQ writeup for ${issueKey}: ${entry.title}`,
-            effort: 'Medium',
+            effort: 'High',
           });
 
           const url = faqUrl ? `${faqUrl}#${entry.anchor}` : '';

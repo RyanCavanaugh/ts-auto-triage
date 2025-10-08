@@ -14,7 +14,7 @@ This suggestion has already been logged - see #4196.
 
 > I want to make sure a value has no extra properties, how do I do that?
 
- ee suggestion #12936
+See suggestion #12936
 
 ### Callback Narrowing
 
@@ -134,6 +134,32 @@ Because TypeScript doesn't have sealed/closed types, there's no type which refer
 
 Certain [lint rules](https://github.com/typescript-eslint/typescript-eslint/issues/8700) ban using `{}`; we do not recommend this rule and we don't design the language around misguided lint rules. The correct value to use for "any non-null non-undefined value" is `{ }`, other suggested types like `Record<string, never>` are not particularly coherent and shouldn't be used instead. We recommend disabling any lint rule that tries to prevent you from using `{ }`, because (unlike `String` or `Number`) it's a valid type that does occur in normal usage of TypeScript.
 
+### `Record<K, V>` is a Constraint on Properties, Not Keys
+
+> I made a `Record<number, any>` and TypeScript incorrectly let me use an object with string keys. Bug?
+
+`Record<K, V>` means that for properties whose keys are of type `K`, the corresponding types of those properties must be `V`.
+It *is* not a constraint on which keys are present.
+For example, these two types are structurally equivalent:
+```ts
+type Point2d_Rec = Record<"x" | "y", number>;
+type Point2d_Obj = { x: number, y: number };
+```
+and they display the same behavior with regard to excess property checking:
+```ts
+function accept_point2d_rec(x: Point2d_Rec) { }
+function accept_point2d_obj(x: Point2d_Obj) { }
+
+const origin = { x: 0, y: 0, name: "origin" };
+accept_point2d_rec(origin); // OK
+accept_point2d_obj(origin); // OK
+
+// Not OK, 'name' appears excess
+accept_point2d_rec({ x: 1, y: 0, name: "x_unit" });
+// Not OK, 'name' appears excess
+accept_point2d_obj({ x: 1, y: 0, name: "x_unit" });
+```
+
 ### Evolving `let` and Evolving Arrays Aren't `any`
 
 > I write `let x;` and saw that it was `any`, but I have `noImplicitAny` on!
@@ -163,7 +189,13 @@ Even those these appear as `any` in tooltips (see #54414), these don't have any 
 
 Object types in TypeScript aren't "sealed" / "closed" / "final". In other words, if you have a variable of *type* `{ a: string }`, it's possible that the variable points to a *value* like `{ a: "hello", b: 42 }`.
 
-When you're directly creating an object literal, TypeScript uses "excess property checks" to detect likely problems:
+When you're directly creating an object literal, TypeScript uses "excess property checks" to detect likely problems.
+When an object literal is specified inline, we can be reasonably confident that it's not (soundly) possible to access properties that aren't on the declared type of the binding that receives it.
+Excess property checking reveals situations where you've written a property key that "doesn't seem to go anywhere", which is extremely likely to be *some* kind of bug.
+
+This isn't true for indirect uses; it's entirely possible that the property key that is "excess" in one context is directly visible elsewhere, and thus isn't "going nowhere" the same way an unmatched key in an immediate object literal is.
+
+A classic example is this one:
 ```ts
 interface Dimensions {
     width: number;
@@ -174,7 +206,7 @@ interface Dimensions {
 const p: Dimensions = {
     width: 32,
     height: 14,
-    depht: 11 // <-- typo!!
+    depht: 11 // <-- typo! bad!!
 }
 ```
 However, this code is still legal:

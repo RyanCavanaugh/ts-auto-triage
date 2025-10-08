@@ -14,15 +14,15 @@
       },
       "deployments": {
         "low": {
-          "chat": "gpt-4o",
+          "chat": "o4-mini",
           "embeddings": "text-embedding-3-large"
         },
         "medium": {
-          "chat": "gpt-4o",
+          "chat": "o1",
           "embeddings": "text-embedding-3-large"
         },
         "high": {
-          "chat": "gpt-4o",
+          "chat": "o3",
           "embeddings": "text-embedding-3-large"
         }
       }
