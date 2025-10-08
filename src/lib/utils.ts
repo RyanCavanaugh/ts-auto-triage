@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import { execSync } from 'child_process';
 import type { IssueRef, Config, IssueAction } from './schemas.js';
 
-export function parseIssueRef(input: string): IssueRef {
+export function parseIssueRef(input: string, defaultRepo?: string): IssueRef {
   // Handle URL format: https://github.com/owner/repo/issues/123
   const urlMatch = input.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/);
   if (urlMatch) {
@@ -22,6 +22,20 @@ export function parseIssueRef(input: string): IssueRef {
       owner: shortMatch[1]!,
       repo: shortMatch[2]!,
       number: parseInt(shortMatch[3]!, 10),
+    };
+  }
+
+  // Handle bare issue number format: #123 (requires defaultRepo)
+  const bareMatch = input.match(/^#?(\d+)$/);
+  if (bareMatch && defaultRepo) {
+    const [owner, repo] = defaultRepo.split('/');
+    if (!owner || !repo) {
+      throw new Error(`Invalid defaultRepo format: ${defaultRepo}. Expected format: owner/repo`);
+    }
+    return {
+      owner,
+      repo,
+      number: parseInt(bareMatch[1]!, 10),
     };
   }
 
@@ -404,4 +418,16 @@ export function formatActionsAsMarkdown(actions: IssueAction[]): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Parse a repository reference string into owner and repo parts.
+ * Throws an error if the format is invalid.
+ */
+export function parseRepoRef(input: string): { owner: string; repo: string } {
+  const parts = input.split('/');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`Invalid repository format: ${input}. Expected format: owner/repo`);
+  }
+  return { owner: parts[0], repo: parts[1] };
 }

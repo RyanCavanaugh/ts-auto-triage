@@ -138,6 +138,8 @@ export const ConfigSchema = z.object({
     cacheEnabled: z.boolean(),
     maxEmbeddingInputLength: z.number(),
   }),
+  repositories: z.array(z.string()).optional(),
+  defaultRepo: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

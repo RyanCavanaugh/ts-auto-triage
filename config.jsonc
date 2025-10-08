@@ -40,5 +40,11 @@
     "maxReproAttempts": 3,
     "cacheEnabled": true,
     "maxEmbeddingInputLength": 8000
-  }
+  },
+  // Optional: List of repositories to process when no argument is provided
+  "repositories": [
+    "microsoft/TypeScript"
+  ],
+  // Optional: Default repository for bare issue numbers (e.g., #9998 -> microsoft/TypeScript#9998)
+  "defaultRepo": "microsoft/TypeScript"
 }

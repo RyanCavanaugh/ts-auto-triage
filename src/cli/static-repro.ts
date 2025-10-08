@@ -15,6 +15,10 @@ async function main() {
   const logger = createConsoleLogger();
   
   try {
+    // Load configuration first to get defaultRepo
+    const configContent = await readFile('config.jsonc', 'utf-8');
+    const config = ConfigSchema.parse(jsonc.parse(configContent));
+
     // Parse command line arguments
     const args = process.argv.slice(2);
     const validateFlag = args.includes('--validate');
@@ -23,6 +27,7 @@ async function main() {
     if (!issueRefInput) {
       console.error('Usage: static-repro <issue-ref> [--validate]');
       console.error('Example: static-repro Microsoft/TypeScript#9998');
+      console.error('Example: static-repro #9998 (uses defaultRepo from config)');
       console.error('Example: static-repro Microsoft/TypeScript#9998 --validate');
       console.error('');
       console.error('Options:');
@@ -30,14 +35,10 @@ async function main() {
       process.exit(1);
     }
 
-    const issueRef = parseIssueRef(issueRefInput);
+    const issueRef = parseIssueRef(issueRefInput, config.defaultRepo);
     const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
     
     logger.info(`Analyzing issue for reproduction: ${issueKey}`);
-
-    // Load configuration
-    const configContent = await readFile('config.jsonc', 'utf-8');
-    const config = ConfigSchema.parse(jsonc.parse(configContent));
 
     // Create AI wrapper
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);

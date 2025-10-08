@@ -62,21 +62,26 @@ function getIssueRefFromArgs(taskName) {
     // Fallback: show usage
     console.error(`Usage: hereby ${taskName} -- <issue-ref>`);
     console.error(`Example: hereby ${taskName} -- Microsoft/TypeScript#9998`);
+    console.error(`Example with bare number: hereby ${taskName} -- #9998 (uses defaultRepo from config)`);
     process.exit(1);
 }
 
 // Helper function to extract repository reference from command line arguments
-function getRepoRefFromArgs(taskName) {
-    // Look for argument after -- separator
+function getRepoRefFromArgs(taskName, allowMultiple = false) {
+    // Look for arguments after -- separator
     const separatorIndex = process.argv.indexOf('--');
     if (separatorIndex >= 0 && separatorIndex < process.argv.length - 1) {
-        return process.argv[separatorIndex + 1];
+        if (allowMultiple) {
+            // Return all arguments after --
+            return process.argv.slice(separatorIndex + 1);
+        } else {
+            // Return just the first argument
+            return process.argv[separatorIndex + 1];
+        }
     }
     
-    // Fallback: show usage
-    console.error(`Usage: hereby ${taskName} -- <owner/repo>`);
-    console.error(`Example: hereby ${taskName} -- Microsoft/TypeScript`);
-    process.exit(1);
+    // No arguments provided - commands will use config defaults
+    return allowMultiple ? [] : null;
 }
 
 // Dev inspection tasks
@@ -165,8 +170,8 @@ export const fetchIssues = task({
     description: "Fetch all issues for a repository from GitHub",
     dependencies: [build],
     run: async () => {
-        const repoRef = getRepoRefFromArgs('fetch-issues');
-        await execa("node", ["dist/cli/fetch-issues.js", repoRef], { stdio: "inherit" });
+        const repoRefs = getRepoRefFromArgs('fetch-issues', true);
+        await execa("node", ["dist/cli/fetch-issues.js", ...repoRefs], { stdio: "inherit" });
     },
 });
 
@@ -175,8 +180,8 @@ export const summarizeIssues = task({
     description: "Generate AI summaries for all issues in a repository",
     dependencies: [build],
     run: async () => {
-        const repoRef = getRepoRefFromArgs('summarize-issues');
-        await execa("node", ["dist/cli/summarize-issues.js", repoRef], { stdio: "inherit" });
+        const repoRefs = getRepoRefFromArgs('summarize-issues', true);
+        await execa("node", ["dist/cli/summarize-issues.js", ...repoRefs], { stdio: "inherit" });
     },
 });
 
@@ -185,8 +190,8 @@ export const computeEmbeddings = task({
     description: "Compute embeddings for issues in a repository",
     dependencies: [build],
     run: async () => {
-        const repoRef = getRepoRefFromArgs('compute-embeddings');
-        await execa("node", ["dist/cli/compute-embeddings.js", repoRef], { stdio: "inherit" });
+        const repoRefs = getRepoRefFromArgs('compute-embeddings', true);
+        await execa("node", ["dist/cli/compute-embeddings.js", ...repoRefs], { stdio: "inherit" });
     },
 });
 
@@ -242,8 +247,8 @@ export const makeNews = task({
     description: "Generate newspaper reports for the last 7 days",
     dependencies: [build],
     run: async () => {
-        const repoRef = getRepoRefFromArgs('make-news');
-        await execa("node", ["dist/cli/make-news.js", repoRef], { stdio: "inherit" });
+        const repoRefs = getRepoRefFromArgs('make-news', true);
+        await execa("node", ["dist/cli/make-news.js", ...repoRefs], { stdio: "inherit" });
     },
 });
 
