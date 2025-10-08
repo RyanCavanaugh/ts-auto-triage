@@ -161,7 +161,7 @@ async function processSuggestion(
 
 // Generate a brief contextual summary of the OP and prior 3 comments
 async function generateContextSummary(
-  aiWrapper: { completion: <T = any>(messages: Array<{ role: string; content: string }>, options?: { jsonSchema?: unknown; maxTokens?: number; context?: string; effort?: string }) => Promise<T> },
+  aiWrapper: { completion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string; effort?: string }) => Promise<{ content: string }> },
   issue: GitHubIssue,
   currentCommentIndex: number,
   config: Config,
@@ -196,7 +196,7 @@ async function generateContextSummary(
     }
   );
   
-  return (response as { content: string }).content;
+  return response.content;
 }
 
 // Apply incremental updates from comment processing to the accumulated summary

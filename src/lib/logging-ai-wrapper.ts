@@ -1,4 +1,4 @@
-import type { AIWrapper, ChatMessage } from './ai-wrapper.js';
+import type { AIWrapper, ChatMessage, ChatCompletionResponse } from './ai-wrapper.js';
 import type { FileLogger } from './file-logger.js';
 import type z from 'zod';
 
@@ -10,8 +10,9 @@ export function createLoggingAIWrapper(
   ai: AIWrapper,
   fileLogger: FileLogger
 ): AIWrapper {
-  return {
-    async completion<T = any>(
+  // Create wrapper with proper overloads by assigning to AIWrapper type
+  const wrapper: AIWrapper = {
+    completion: (async <T>(
       messages: ChatMessage[],
       options?: {
         jsonSchema?: z.ZodSchema<T>;
@@ -19,15 +20,16 @@ export function createLoggingAIWrapper(
         temperature?: number;
         model?: string;
         context?: string;
+        effort?: string;
       }
-    ): Promise<any> {
+    ): Promise<T | ChatCompletionResponse> => {
       const context = options?.context ?? (options?.jsonSchema ? 'Structured completion' : 'Chat completion');
       
       // Log input
       await fileLogger.logLLMInput(context, messages);
       
-      // Make the actual call
-      const result = await ai.completion(messages, options as any);
+      // Make the actual call - cast to work around overload resolution
+      const result = await (ai.completion as any)(messages, options);
       
       // Log output
       if (options?.jsonSchema) {
@@ -35,13 +37,14 @@ export function createLoggingAIWrapper(
         await fileLogger.logLLMOutput(context, result);
       } else {
         // Chat completion - log content and usage
-        await fileLogger.logLLMOutput(context, { content: (result as any).content }, (result as any).usage);
+        const chatResult = result as ChatCompletionResponse;
+        await fileLogger.logLLMOutput(context, { content: chatResult.content }, chatResult.usage);
       }
       
       return result;
-    },
+    }) as AIWrapper['completion'],
 
-    async getEmbedding(text: string, model?: string, context?: string) {
+    getEmbedding: async (text: string, model?: string, context?: string) => {
       const embeddingContext = context ?? 'Get embedding';
       
       // Log input
@@ -60,4 +63,6 @@ export function createLoggingAIWrapper(
       return result;
     },
   };
+  
+  return wrapper;
 }
