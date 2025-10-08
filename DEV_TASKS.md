@@ -94,12 +94,21 @@ hereby fetch-issue -- Microsoft/TypeScript#9998
 
 #### `hereby fetch-issues -- <owner/repo>`
 
-Fetch all issues for a repository from GitHub.
+Fetch all issues and pull requests for a repository from GitHub. Now includes timeline events (labels, milestones, state changes).
+
+**Options:**
+- `--force` - Force re-fetch of all issues, even if they appear up-to-date
 
 **Example:**
 ```bash
 hereby fetch-issues -- Microsoft/TypeScript
+hereby fetch-issues -- Microsoft/TypeScript --force
 ```
+
+**What's Fetched:**
+- Issue/PR metadata (title, body, state, labels, milestone, assignees)
+- All comments
+- Timeline events (labeled, unlabeled, milestoned, demilestoned, closed, reopened, assigned, unassigned, renamed)
 
 ### AI Processing Tasks
 
@@ -149,6 +158,7 @@ Generate newspaper reports for the last 7 days of issue activity. Creates daily 
 - Executive summary of activity
 - Recommended actions (moderation/response needed)
 - Chronological activity summaries for each issue
+- **NEW**: One-sentence AI-generated summary for each issue
 
 Each day starts and ends at 8 AM Seattle time. Reports include:
 - Issues created
@@ -166,6 +176,21 @@ hereby make-news -- Microsoft/TypeScript
 - Each report covers a 24-hour period from 8 AM Seattle time to 8 AM Seattle time the next day
 - AI analyzes comments for spam, rudeness, and response needs
 - Comments from contributors/owners are excluded from action recommendations
+
+#### `hereby publish-news -- <owner/repo>`
+
+Publish newspaper reports to GitHub gists. Automatically creates new gists or updates existing ones by matching filename.
+
+**Example:**
+```bash
+hereby publish-news -- Microsoft/TypeScript
+```
+
+**Features:**
+- Automatically matches existing gists by filename to avoid duplicates
+- Updates existing gists when reports are regenerated
+- Creates private gists by default
+- Uses the first line of the report as the gist description
 
 ### Testing and Validation Tasks
 
