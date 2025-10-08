@@ -13,23 +13,26 @@ async function main() {
   const logger = createConsoleLogger();
   
   try {
+    // Load configuration first to get defaultRepo
+    const configContent = await readFile('config.jsonc', 'utf-8');
+    const config = ConfigSchema.parse(jsonc.parse(configContent));
+
     // Parse command line arguments
     const args = process.argv.slice(2);
     if (args.length !== 1) {
       console.error('Usage: get-repro-steps <issue-ref>');
       console.error('Example: get-repro-steps Microsoft/TypeScript#9998');
+      if (config.github.defaultRepo) {
+        console.error(`Example: get-repro-steps #9998 (uses default repo: ${config.github.defaultRepo})`);
+      }
       process.exit(1);
     }
 
     const issueRefInput = args[0]!;
-    const issueRef = parseIssueRef(issueRefInput);
+    const issueRef = parseIssueRef(issueRefInput, config.github.defaultRepo);
     const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
     
     logger.info(`Generating reproduction steps for: ${issueKey}`);
-
-    // Load configuration
-    const configContent = await readFile('config.jsonc', 'utf-8');
-    const config = ConfigSchema.parse(jsonc.parse(configContent));
 
     // Create AI wrapper
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);

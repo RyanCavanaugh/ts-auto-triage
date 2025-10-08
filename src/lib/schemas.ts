@@ -132,6 +132,8 @@ export const ConfigSchema = z.object({
     maxRetries: z.number(),
     faqUrl: z.string(),
     bots: z.array(z.string()),
+    defaultRepo: z.string().optional(),
+    repos: z.array(z.string()).optional(),
   }),
   ai: z.object({
     maxReproAttempts: z.number(),
