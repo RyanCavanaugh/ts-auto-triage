@@ -66,6 +66,16 @@ export function createNewspaperGenerator(
           }
         }
         
+        // Check if any timeline events were in window
+        if (issue.timeline_events) {
+          for (const event of issue.timeline_events) {
+            const eventDate = new Date(event.created_at);
+            if (eventDate >= startTime && eventDate < endTime) {
+              hasActivity = true;
+            }
+          }
+        }
+        
         if (hasActivity) {
           issuesWithActivity.push({ ref, issue });
           uniqueIssues.add(issueKey);
@@ -268,25 +278,219 @@ async function buildIssueSummary(
   const eventsBeforeWindow = allEvents.filter(e => e.date < startTime).slice(-3);
   const eventsInWindow = allEvents.filter(e => e.date >= startTime && e.date < endTime);
   
-  // Format prior events
-  for (const event of eventsBeforeWindow) {
-    const timeDesc = getTimeDescription(event.date, reportDate);
-    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, false, bots);
+  // Coalesce and format prior events
+  const coalescedBeforeWindow = coalesceMetadataEvents(eventsBeforeWindow);
+  for (const eventOrGroup of coalescedBeforeWindow) {
+    const timeDesc = getTimeDescription(eventOrGroup.date, reportDate);
+    const formatted = await formatEventOrGroup(eventOrGroup, issueUrl, timeDesc, issueRef, actions, ai, logger, false, bots);
     if (formatted) {
       markdown += ` * ${formatted}\n`;
     }
   }
   
-  // Format events in window
-  for (const event of eventsInWindow) {
-    const timeDesc = getTimeDescription(event.date, reportDate);
-    const formatted = await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, true, bots);
+  // Coalesce and format events in window
+  const coalescedInWindow = coalesceMetadataEvents(eventsInWindow);
+  for (const eventOrGroup of coalescedInWindow) {
+    const timeDesc = getTimeDescription(eventOrGroup.date, reportDate);
+    const formatted = await formatEventOrGroup(eventOrGroup, issueUrl, timeDesc, issueRef, actions, ai, logger, true, bots);
     if (formatted) {
       markdown += ` * ${formatted}\n`;
     }
   }
   
   return { text: markdown, actions };
+}
+
+// Helper type for coalesced events
+interface EventGroup {
+  date: Date;
+  actor: string;
+  events: Event[];
+  isGroup: true;
+}
+
+interface Event {
+  date: Date;
+  type: 'created' | 'commented' | 'closed' | 'reopened' | 'labeled' | 'unlabeled' | 'milestoned' | 'demilestoned' | 'assigned' | 'unassigned';
+  actor: string;
+  body?: string;
+  author_association?: string;
+  comment_id?: number;
+  label_name?: string;
+  milestone_title?: string;
+  assignee_login?: string;
+}
+
+type EventOrGroup = Event | EventGroup;
+
+function isMetadataEvent(event: Event): boolean {
+  return event.type === 'labeled' || 
+         event.type === 'unlabeled' || 
+         event.type === 'milestoned' || 
+         event.type === 'demilestoned' || 
+         event.type === 'assigned' || 
+         event.type === 'unassigned';
+}
+
+function coalesceMetadataEvents(events: Event[]): EventOrGroup[] {
+  const result: EventOrGroup[] = [];
+  let i = 0;
+  
+  while (i < events.length) {
+    const event = events[i];
+    
+    if (!event) {
+      i++;
+      continue;
+    }
+    
+    if (!isMetadataEvent(event)) {
+      // Non-metadata event, add as-is
+      result.push(event);
+      i++;
+      continue;
+    }
+    
+    // Look ahead to find consecutive metadata events by the same actor
+    const groupEvents: Event[] = [event];
+    let j = i + 1;
+    
+    while (j < events.length) {
+      const nextEvent = events[j];
+      
+      if (!nextEvent) {
+        break;
+      }
+      
+      // Check if it's a metadata event by the same actor and close in time (within 5 minutes)
+      const timeDiff = Math.abs(nextEvent.date.getTime() - event.date.getTime());
+      const fiveMinutes = 5 * 60 * 1000;
+      
+      if (isMetadataEvent(nextEvent) && 
+          nextEvent.actor === event.actor && 
+          timeDiff <= fiveMinutes) {
+        groupEvents.push(nextEvent);
+        j++;
+      } else {
+        break;
+      }
+    }
+    
+    // If we found multiple events, create a group
+    if (groupEvents.length > 1) {
+      result.push({
+        date: event.date,
+        actor: event.actor,
+        events: groupEvents,
+        isGroup: true,
+      });
+    } else {
+      // Single event, add as-is
+      result.push(event);
+    }
+    
+    i = j;
+  }
+  
+  return result;
+}
+
+function formatCoalescedMetadataEvents(group: EventGroup): string {
+  const actorName = `**${group.actor}**`;
+  const parts: string[] = [];
+  
+  // Group by event type
+  const labeled: string[] = [];
+  const unlabeled: string[] = [];
+  let milestone: string | null = null;
+  let demilestone: string | null = null;
+  const assigned: string[] = [];
+  const unassigned: string[] = [];
+  
+  for (const event of group.events) {
+    if (event.type === 'labeled' && event.label_name) {
+      labeled.push(event.label_name);
+    } else if (event.type === 'unlabeled' && event.label_name) {
+      unlabeled.push(event.label_name);
+    } else if (event.type === 'milestoned' && event.milestone_title) {
+      milestone = event.milestone_title;
+    } else if (event.type === 'demilestoned' && event.milestone_title) {
+      demilestone = event.milestone_title;
+    } else if (event.type === 'assigned' && event.assignee_login) {
+      assigned.push(event.assignee_login);
+    } else if (event.type === 'unassigned' && event.assignee_login) {
+      unassigned.push(event.assignee_login);
+    }
+  }
+  
+  // Build the description
+  if (labeled.length > 0) {
+    const labelList = labeled.map(l => `\`${l}\``).join(', ');
+    parts.push(`added label${labeled.length > 1 ? 's' : ''} ${labelList}`);
+  }
+  
+  if (unlabeled.length > 0) {
+    const labelList = unlabeled.map(l => `\`${l}\``).join(', ');
+    parts.push(`removed label${unlabeled.length > 1 ? 's' : ''} ${labelList}`);
+  }
+  
+  if (milestone) {
+    parts.push(`set milestone to \`${milestone}\``);
+  }
+  
+  if (demilestone) {
+    parts.push(`removed from milestone \`${demilestone}\``);
+  }
+  
+  if (assigned.length > 0) {
+    const assigneeList = assigned.map(a => `**${a}**`).join(', ');
+    parts.push(`assigned to ${assigneeList}`);
+  }
+  
+  if (unassigned.length > 0) {
+    const assigneeList = unassigned.map(a => `**${a}**`).join(', ');
+    parts.push(`unassigned ${assigneeList}`);
+  }
+  
+  // Join parts with comma and "and"
+  let description = '';
+  if (parts.length === 0) {
+    return `${actorName} performed metadata actions`;
+  } else if (parts.length === 1 && parts[0]) {
+    description = parts[0];
+  } else if (parts.length === 2 && parts[0] && parts[1]) {
+    description = `${parts[0]} and ${parts[1]}`;
+  } else if (parts.length > 2) {
+    const lastPart = parts[parts.length - 1];
+    if (lastPart) {
+      const otherParts = parts.slice(0, -1).join(', ');
+      description = `${otherParts}, and ${lastPart}`;
+    }
+  }
+  
+  return `${actorName} ${description}`;
+}
+
+async function formatEventOrGroup(
+  eventOrGroup: EventOrGroup,
+  issueUrl: string,
+  timeDesc: string,
+  issueRef: IssueRef,
+  actions: ActionItem[],
+  ai: AIWrapper,
+  logger: Logger,
+  checkForActions: boolean,
+  bots: string[]
+): Promise<string | null> {
+  // Check if it's a group
+  if ('isGroup' in eventOrGroup && eventOrGroup.isGroup) {
+    const formatted = formatCoalescedMetadataEvents(eventOrGroup);
+    return `(${timeDesc}) ${formatted}`;
+  }
+  
+  // Otherwise, format as a single event (cast is safe due to above check)
+  const event = eventOrGroup as Event;
+  return await formatEvent(event, issueUrl, timeDesc, issueRef, actions, ai, logger, checkForActions, bots);
 }
 
 async function formatEvent(
@@ -315,21 +519,21 @@ async function formatEvent(
   if (event.type === 'created') {
     return `created by ${actorName}`;
   } else if (event.type === 'closed') {
-    return `${actorName} closed the issue`;
+    return `(${timeDesc}) ${actorName} closed the issue`;
   } else if (event.type === 'reopened') {
-    return `${actorName} reopened the issue`;
+    return `(${timeDesc}) ${actorName} reopened the issue`;
   } else if (event.type === 'labeled' && event.label_name) {
-    return `${actorName} added label \`${event.label_name}\``;
+    return `(${timeDesc}) ${actorName} added label \`${event.label_name}\``;
   } else if (event.type === 'unlabeled' && event.label_name) {
-    return `${actorName} removed label \`${event.label_name}\``;
+    return `(${timeDesc}) ${actorName} removed label \`${event.label_name}\``;
   } else if (event.type === 'milestoned' && event.milestone_title) {
-    return `${actorName} added to milestone \`${event.milestone_title}\``;
+    return `(${timeDesc}) ${actorName} added to milestone \`${event.milestone_title}\``;
   } else if (event.type === 'demilestoned' && event.milestone_title) {
-    return `${actorName} removed from milestone \`${event.milestone_title}\``;
+    return `(${timeDesc}) ${actorName} removed from milestone \`${event.milestone_title}\``;
   } else if (event.type === 'assigned' && event.assignee_login) {
-    return `${actorName} assigned to **${event.assignee_login}**`;
+    return `(${timeDesc}) ${actorName} assigned to **${event.assignee_login}**`;
   } else if (event.type === 'unassigned' && event.assignee_login) {
-    return `${actorName} unassigned **${event.assignee_login}**`;
+    return `(${timeDesc}) ${actorName} unassigned **${event.assignee_login}**`;
   } else if (event.type === 'commented' && event.body) {
     const authorAssociation = event.author_association ?? 'NONE';
     const isContributorOrOwner = authorAssociation === 'CONTRIBUTOR' || authorAssociation === 'OWNER' || authorAssociation === 'MEMBER';
@@ -419,9 +623,9 @@ function getTimeDescription(eventDate: Date, reportDate: Date): string {
   const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
   const daysDiff = Math.floor((reportDateOnly.getTime() - eventDateOnly.getTime()) / msPerDay);
   
-  // Handle future dates (negative daysDiff) - treat as today
+  // Handle future dates (negative daysDiff)
   if (daysDiff < 0) {
-    return 'today';
+    return 'later';
   }
   
   if (daysDiff === 0) {
