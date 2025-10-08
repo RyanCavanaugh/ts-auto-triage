@@ -140,6 +140,7 @@ async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: C
   const response = await ai.structuredCompletion<IssueSummaries>(messages, IssueSummariesSchema, { 
     maxTokens: 1200,
     context: `Get issue summary for ${issueKey}`,
+    effort: 'Low',
   });
   return response.summaries;
 }

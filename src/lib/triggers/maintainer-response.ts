@@ -139,6 +139,7 @@ export class MaintainerResponseTrigger implements CurationTrigger {
       const response = await ai.chatCompletion(messages, {
         maxTokens: 300,
         context: `Duplicate check for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
+        effort: 'Medium',
       });
 
       // Check if AI confirms these are likely duplicates

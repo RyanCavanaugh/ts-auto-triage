@@ -6,11 +6,25 @@
   },
   "azure": {
     "openai": {
-      // Update these endpoints as needed
-      "endpoint": "https://ryanca-aoai.openai.azure.com/",
+      // Update these endpoints as needed for different effort levels
+      "endpoints": {
+        "low": "https://ryanca-aoai.openai.azure.com/",
+        "medium": "https://ryanca-aoai.openai.azure.com/",
+        "high": "https://ryanca-aoai.openai.azure.com/"
+      },
       "deployments": {
-        "chat": "gpt-4o",
-        "embeddings": "text-embedding-3-large"
+        "low": {
+          "chat": "gpt-4o",
+          "embeddings": "text-embedding-3-large"
+        },
+        "medium": {
+          "chat": "gpt-4o",
+          "embeddings": "text-embedding-3-large"
+        },
+        "high": {
+          "chat": "gpt-4o",
+          "embeddings": "text-embedding-3-large"
+        }
       }
     }
   },

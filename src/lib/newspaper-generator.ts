@@ -293,6 +293,7 @@ async function summarizeComment(
     {
       maxTokens: 300,
       context: `Summarize comment by ${actor}`,
+      effort: 'Low',
     }
   );
   

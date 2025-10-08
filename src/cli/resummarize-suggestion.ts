@@ -72,8 +72,8 @@ async function processSuggestion(
   logger: unknown
 ): Promise<SuggestionSummary> {
   const aiWrapper = ai as { 
-    structuredCompletion: <T>(messages: Array<{ role: string; content: string }>, schema: unknown, options?: { maxTokens?: number; context?: string }) => Promise<T>;
-    chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string }) => Promise<{ content: string }>;
+    structuredCompletion: <T>(messages: Array<{ role: string; content: string }>, schema: unknown, options?: { maxTokens?: number; context?: string; effort?: string }) => Promise<T>;
+    chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string; effort?: string }) => Promise<{ content: string }>;
   };
   const log = logger as { info: (msg: string) => void; debug: (msg: string) => void; warn: (msg: string) => void };
 
@@ -98,6 +98,7 @@ async function processSuggestion(
     {
       maxTokens: 2000,
       context: `Initial summary for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
+      effort: 'Medium',
     }
   );
 
@@ -145,6 +146,7 @@ async function processSuggestion(
       {
         maxTokens: 2000,
         context: `Process comment ${i + 1} for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
+        effort: 'Medium',
       }
     );
 
@@ -160,7 +162,7 @@ async function processSuggestion(
 
 // Generate a brief contextual summary of the OP and prior 3 comments
 async function generateContextSummary(
-  aiWrapper: { chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string }) => Promise<{ content: string }> },
+  aiWrapper: { chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string; effort?: string }) => Promise<{ content: string }> },
   issue: GitHubIssue,
   currentCommentIndex: number,
   config: Config,
@@ -191,6 +193,7 @@ async function generateContextSummary(
     {
       maxTokens: 500,
       context,
+      effort: 'Low',
     }
   );
   
