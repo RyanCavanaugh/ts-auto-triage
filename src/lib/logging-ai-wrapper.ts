@@ -1,4 +1,4 @@
-import type { AIWrapper, ChatMessage, ChatCompletionResponse } from './ai-wrapper.js';
+import type { AIWrapper, ChatMessage } from './ai-wrapper.js';
 import type { FileLogger } from './file-logger.js';
 import type z from 'zod';
 
@@ -10,36 +10,29 @@ export function createLoggingAIWrapper(
   ai: AIWrapper,
   fileLogger: FileLogger
 ): AIWrapper {
-  // Create wrapper with proper overloads by assigning to AIWrapper type
+  // Create wrapper with proper types
   const wrapper: AIWrapper = {
     completion: (async <T>(
       messages: ChatMessage[],
-      options?: {
-        jsonSchema?: z.ZodSchema<T>;
+      options: {
+        jsonSchema: z.ZodSchema<T>;
         maxTokens?: number;
         temperature?: number;
         model?: string;
         context?: string;
         effort?: string;
       }
-    ): Promise<T | ChatCompletionResponse> => {
-      const context = options?.context ?? (options?.jsonSchema ? 'Structured completion' : 'Chat completion');
+    ): Promise<T> => {
+      const context = options.context ?? 'Structured completion';
       
       // Log input
       await fileLogger.logLLMInput(context, messages);
       
-      // Make the actual call - cast to work around overload resolution
-      const result = await (ai.completion as any)(messages, options);
+      // Make the actual call - need to cast to work around type inference
+      const result = await ai.completion<T>(messages, options as any);
       
-      // Log output
-      if (options?.jsonSchema) {
-        // Structured completion - log the parsed result
-        await fileLogger.logLLMOutput(context, result);
-      } else {
-        // Chat completion - log content and usage
-        const chatResult = result as ChatCompletionResponse;
-        await fileLogger.logLLMOutput(context, { content: chatResult.content }, chatResult.usage);
-      }
+      // Log output (structured result)
+      await fileLogger.logLLMOutput(context, result);
       
       return result;
     }) as AIWrapper['completion'],

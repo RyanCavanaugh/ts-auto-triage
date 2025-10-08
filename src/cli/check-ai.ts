@@ -4,7 +4,7 @@ import { readFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
 import { createConsoleLogger } from '../lib/utils.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema } from '../lib/schemas.js';
+import { ConfigSchema, TextResponseSchema } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -44,13 +44,13 @@ async function main() {
       ];
 
       const chatResp = await ai.completion(messages, { 
+        jsonSchema: TextResponseSchema,
         maxTokens: 20,
         context: 'AI chat completion validation test',
         effort: 'Medium',
       });
-      const contentPreview = (chatResp.content || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      const contentPreview = (chatResp.text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
       logger.info(`Chat test succeeded. Response preview: ${contentPreview}`);
-      logger.info(`Chat tokens used: ${chatResp.usage?.total_tokens ?? 0}`);
     } catch (err) {
       logger.error(`Chat test failed: ${err}`);
       process.exit(1);

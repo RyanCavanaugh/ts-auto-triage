@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'fs/promises';
 import * as jsonc from 'jsonc-parser';
 import { parseIssueRef, createConsoleLogger, ensureDirectoryExists, formatIssueRef, escapeTextForPrompt } from '../lib/utils.js';
 import { createAIWrapper } from '../lib/ai-wrapper.js';
-import { ConfigSchema, GitHubIssueSchema, SuggestionSummarySchema, CommentProcessingResultSchema, type IssueRef, type GitHubIssue, type Config, type SuggestionSummary, type CommentProcessingResult } from '../lib/schemas.js';
+import { ConfigSchema, GitHubIssueSchema, SuggestionSummarySchema, CommentProcessingResultSchema, TextResponseSchema, type IssueRef, type GitHubIssue, type Config, type SuggestionSummary, type CommentProcessingResult, type TextResponse } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
 
 async function main() {
@@ -72,7 +72,7 @@ async function processSuggestion(
   logger: unknown
 ): Promise<SuggestionSummary> {
   const aiWrapper = ai as { 
-    completion: <T = any>(messages: Array<{ role: string; content: string }>, options?: { jsonSchema?: unknown; maxTokens?: number; context?: string; effort?: string }) => Promise<T>;
+    completion: <T>(messages: Array<{ role: string; content: string }>, options: { jsonSchema: unknown; maxTokens?: number; context?: string; effort?: string }) => Promise<T>;
   };
   const log = logger as { info: (msg: string) => void; debug: (msg: string) => void; warn: (msg: string) => void };
 
@@ -161,7 +161,7 @@ async function processSuggestion(
 
 // Generate a brief contextual summary of the OP and prior 3 comments
 async function generateContextSummary(
-  aiWrapper: { completion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string; effort?: string }) => Promise<{ content: string }> },
+  aiWrapper: { completion: <T>(messages: Array<{ role: string; content: string }>, options: { jsonSchema: unknown; maxTokens?: number; context?: string; effort?: string }) => Promise<T> },
   issue: GitHubIssue,
   currentCommentIndex: number,
   config: Config,
@@ -187,16 +187,17 @@ async function generateContextSummary(
     priorComments: escapeTextForPrompt(priorCommentsText || '(no prior comments)'),
   });
 
-  const response = await aiWrapper.completion(
+  const response = await aiWrapper.completion<TextResponse>(
     [{ role: 'user', content: contextPrompt }],
     {
+      jsonSchema: TextResponseSchema,
       maxTokens: 500,
       context,
       effort: 'Low',
     }
   );
   
-  return response.content;
+  return response.text;
 }
 
 // Apply incremental updates from comment processing to the accumulated summary

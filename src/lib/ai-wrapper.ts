@@ -60,7 +60,7 @@ export interface EmbeddingResponse {
 
 export interface AIWrapper {
   /**
-   * Make a completion request, optionally with structured output via a Zod schema
+   * Make a completion request with structured output via a Zod schema
    * 
    * IMPORTANT: For nullable fields in schemas, use z.union([type, z.null()]) instead of .nullable()
    * Azure OpenAI doesn't support the "nullable: true" JSON Schema property.
@@ -68,16 +68,6 @@ export interface AIWrapper {
    * ✅ Correct: z.union([z.string(), z.null()])
    * ❌ Wrong:   z.string().nullable()
    */
-  // Without schema - returns ChatCompletionResponse
-  completion(messages: ChatMessage[], options?: {
-    maxTokens?: number;
-    temperature?: number;
-    model?: string;
-    context?: string; // Optional context for cache logging
-    effort?: CognitiveEffort; // Cognitive effort level (defaults to Medium)
-  }): Promise<ChatCompletionResponse>;
-  
-  // With schema - returns parsed type T
   completion<T>(
     messages: ChatMessage[],
     options: {
@@ -127,44 +117,43 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
   };
 
   return {
-    async completion<T = ChatCompletionResponse>(
+    async completion<T>(
       messages: ChatMessage[],
       options: {
-        jsonSchema?: z.ZodSchema<T>;
+        jsonSchema: z.ZodSchema<T>;
         maxTokens?: number;
         temperature?: number;
         model?: string;
         context?: string;
         effort?: CognitiveEffort;
-      } = {}
-    ): Promise<T | ChatCompletionResponse> {
+      }
+    ): Promise<T> {
       const effort = options.effort ?? 'Medium';
       const client = clients[effort];
       const model = options.model ?? config.deployments[effort.toLowerCase() as 'low' | 'medium' | 'high'].chat;
       const zodSchema = options.jsonSchema;
       
-      // Include jsonSchema in cache key if provided
+      // Include jsonSchema in cache key
       const cacheKey = cache ? JSON.stringify({ 
         messages, 
         model, 
         options, 
         effort,
-        ...(zodSchema ? { jsonSchema: zodResponseFormat(zodSchema, "response") } : {})
+        jsonSchema: zodResponseFormat(zodSchema, "response")
       }) : null;
       
       // Create human-readable description for cache logging
-      const description = options.context ?? 
-        (zodSchema ? `Structured completion with ${model} (${effort} effort)` : `Chat completion with ${model} (${effort} effort)`);
+      const description = options.context ?? `Structured completion with ${model} (${effort} effort)`;
       
       if (cache && cacheKey) {
         const cached = await cache.memoize(cacheKey, description, async () => null);
         if (cached) {
-          logger.debug(zodSchema ? 'Using cached structured completion' : 'Using cached chat completion');
-          return cached as T | ChatCompletionResponse;
+          logger.debug('Using cached structured completion');
+          return cached as T;
         }
       }
 
-      logger.debug(zodSchema ? `Making structured response request to ${model} (${effort} effort)` : `Making response request to ${model} (${effort} effort)`);
+      logger.debug(`Making structured response request to ${model} (${effort} effort)`);
       
       try {
         // Convert messages to responses API format
@@ -174,69 +163,39 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
           content: msg.content
         }));
 
-        // Build response options, conditionally adding text format if schema provided
-        const responseOptions: {
-          model: string;
-          input: typeof inputItems;
-          max_output_tokens: number | null;
-          temperature: number | null;
-          text?: {
-            format: {
-              type: 'json_schema';
-              name: string;
-              schema: { [key: string]: unknown };
-              strict: boolean | null;
-            };
-          };
-        } = {
+        // Get the JSON schema from zodResponseFormat
+        const responseFormat = zodResponseFormat(zodSchema, "response");
+
+        const response = await client.responses.create({
           model: model,
           input: inputItems,
           max_output_tokens: options.maxTokens ?? null,
           temperature: options.temperature ?? null,
-        };
-
-        if (zodSchema) {
-          const responseFormat = zodResponseFormat(zodSchema, "response");
-          responseOptions.text = {
+          text: {
             format: {
               type: 'json_schema' as const,
               name: responseFormat.json_schema.name,
               schema: responseFormat.json_schema.schema as { [key: string]: unknown },
               strict: responseFormat.json_schema.strict ?? null,
             }
-          };
-        }
+          }
+        });
 
-        const response = await client.responses.create(responseOptions);
-
-        // Extract text from response output
+        // Extract and parse the JSON output
         if (!response.output_text) {
           throw new Error('No content received from Azure OpenAI');
         }
 
-        // Parse result based on whether schema was provided
-        let result: T | ChatCompletionResponse;
-        if (zodSchema) {
-          result = zodSchema.parse(JSON.parse(response.output_text)) as T;
-        } else {
-          result = {
-            content: response.output_text,
-            usage: response.usage ? {
-              prompt_tokens: response.usage.input_tokens,
-              completion_tokens: response.usage.output_tokens,
-              total_tokens: response.usage.total_tokens,
-            } : undefined,
-          } as ChatCompletionResponse;
-        }
+        const result: T = zodSchema.parse(JSON.parse(response.output_text));
 
         if (cache && cacheKey) {
           await cache.memoize(cacheKey, description, async () => result);
         }
 
-        logger.debug(zodSchema ? `Structured response successful, ${response.usage?.total_tokens ?? 0} tokens used` : `Response successful, ${response.usage?.total_tokens ?? 0} tokens used`);
+        logger.debug(`Structured response successful, ${response.usage?.total_tokens ?? 0} tokens used`);
         return result;
       } catch (error) {
-        logger.error(`Azure OpenAI response failed: ${error}`);
+        logger.error(`Azure OpenAI structured response failed: ${error}`);
         throw error;
       }
     },
