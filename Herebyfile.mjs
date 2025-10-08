@@ -175,7 +175,19 @@ export const fetchIssues = task({
     dependencies: [build],
     run: async () => {
         const repoRefs = getRepoRefFromArgs('fetch-issues', true);
-        await execa("node", ["dist/cli/fetch-issues.js", ...repoRefs], { stdio: "inherit" });
+        
+        // Check for --force flag
+        const separatorIndex = process.argv.indexOf('--');
+        let args = repoRefs;
+        if (separatorIndex >= 0) {
+            const allArgs = process.argv.slice(separatorIndex + 1);
+            const forceIndex = allArgs.indexOf('--force');
+            if (forceIndex >= 0) {
+                args = ['--force', ...repoRefs];
+            }
+        }
+        
+        await execa("node", ["dist/cli/fetch-issues.js", ...args], { stdio: "inherit" });
     },
 });
 
