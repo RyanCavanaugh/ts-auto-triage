@@ -65,7 +65,7 @@ export function createFAQMatcher(
 
           const checkResponse = await ai.completion(checkMessages, {
             jsonSchema: FAQEntryCheckSchema,
-            maxTokens: 200,
+            maxTokens: 800,
             context: `Check FAQ entry match for ${issueKey}: ${entry.title}`,
             effort: 'Low',
           });
@@ -92,7 +92,7 @@ export function createFAQMatcher(
 
           const writeupResponse = await ai.completion(writeupMessages, {
             jsonSchema: FAQEntryWriteupSchema,
-            maxTokens: 500,
+            maxTokens: 5000,
             context: `Generate FAQ writeup for ${issueKey}: ${entry.title}`,
             effort: 'High',
           });

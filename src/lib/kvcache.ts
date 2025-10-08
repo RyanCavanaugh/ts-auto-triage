@@ -37,6 +37,7 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
 
         // If the computed value is explicitly null, don't create a cache file.
         if (result === null) {
+          console.trace();
           logger.debug(`Computed result is null for: ${description}; not creating cache file`);
           return result;
         }

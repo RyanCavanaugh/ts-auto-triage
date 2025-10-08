@@ -163,13 +163,11 @@ export type FAQResponse = z.infer<typeof FAQResponseSchema>;
 // Stage 1: Check if FAQ entry matches (without writing full response)
 const FAQEntryCheckInnerSchema = z.discriminatedUnion('match', [
   z.object({
-    match: z.literal('no'),
-    reasoning: z.string(),
+    match: z.literal('no')
   }),
   z.object({
     match: z.literal('yes'),
-    confidence: z.number().min(1).max(10),
-    reasoning: z.string(),
+    confidence: z.number().min(1).max(10)
   }),
 ]);
 

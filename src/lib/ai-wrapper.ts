@@ -4,7 +4,7 @@ import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity'
 import type { Logger } from './utils.js';
 import { createKVCache } from './kvcache.js';
 import type z from 'zod';
-import { zodResponseFormat } from 'openai/helpers/zod.js';
+import { zodResponseFormat, zodTextFormat } from 'openai/helpers/zod.js';
 
 /**
  * Cognitive effort level for AI operations
@@ -139,7 +139,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         model, 
         options, 
         effort,
-        jsonSchema: zodResponseFormat(zodSchema, "response")
+        jsonSchema: zodTextFormat(zodSchema, "response")
       }) : null;
       
       // Create human-readable description for cache logging
@@ -163,30 +163,32 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
           content: msg.content
         }));
 
-        // Get the JSON schema from zodResponseFormat
-        const responseFormat = zodResponseFormat(zodSchema, "response");
-
         const response = await client.responses.create({
           model: model,
           input: inputItems,
           max_output_tokens: options.maxTokens ?? null,
           temperature: options.temperature ?? null,
           text: {
-            format: {
-              type: 'json_schema' as const,
-              name: responseFormat.json_schema.name,
-              schema: responseFormat.json_schema.schema as { [key: string]: unknown },
-              strict: responseFormat.json_schema.strict ?? null,
-            }
+            format: zodTextFormat(zodSchema, "response")
           }
         });
 
         // Extract and parse the JSON output
         if (!response.output_text) {
-          throw new Error('No content received from Azure OpenAI');
+          console.error(JSON.stringify(response, null, 2));
+          process.exit(-1);
+          // throw new Error('No content received from Azure OpenAI');
         }
 
-        const result: T = zodSchema.parse(JSON.parse(response.output_text));
+        let parseResult: object;
+        try {
+          parseResult = JSON.parse(response.output_text);
+        } catch (e) {
+          console.error(`Failed to parse JSON response: ${e}\nResponse text: ${response.output_text}`);
+          process.exit(-1);
+        }
+
+        const result: T = zodSchema.parse(parseResult);
 
         if (cache && cacheKey) {
           await cache.memoize(cacheKey, description, async () => result);
@@ -195,6 +197,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         logger.debug(`Structured response successful, ${response.usage?.total_tokens ?? 0} tokens used`);
         return result;
       } catch (error) {
+        console.error(error);
         logger.error(`Azure OpenAI structured response failed: ${error}`);
         throw error;
       }
