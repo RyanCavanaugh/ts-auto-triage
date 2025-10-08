@@ -13,7 +13,13 @@ describe('NewspaperGenerator', () => {
   };
 
   const mockAI: AIWrapper = {
-    completion: async () => ({ summary: 'test summary', action_needed: null }),
+    completion: async (messages, options) => {
+      // Handle different completion types
+      if (options.context?.includes('Summarize issue')) {
+        return { text: 'This is a test summary of the issue.' };
+      }
+      return { summary: 'test summary', action_needed: null };
+    },
     getEmbedding: async () => ({ embedding: [], usage: { total_tokens: 0, prompt_tokens: 0 } }),
   } as unknown as AIWrapper;
 

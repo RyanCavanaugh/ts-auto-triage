@@ -270,6 +270,8 @@ export function createIssueFetcher(
           pageCount++;
           logger.info(`Fetching page ${pageCount} for ${owner}/${repo} (cursor: ${cursor?.substring(0, 10) || 'none'}...)`);
           
+          // Note: GitHub's issues API includes both issues and pull requests
+          // The GraphQL API returns them together when querying the issues field
           const query = `
             query($owner: String!, $repo: String!, $cursor: String) {
               repository(owner: $owner, name: $repo) {
