@@ -141,12 +141,9 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       if (cache && cacheKey) {
         const cached = await cache.memoize(cacheKey, options.context, async () => null);
         if (cached) {
-          logger.info(`[Cache hit] ${options.context}`);
           return cached as T;
         }
       }
-
-      logger.info(`[Cache miss] ${options.context}`);
       
       // Retry logic: try up to 3 times
       let lastError: unknown = null;
@@ -208,12 +205,9 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       if (cache && cacheKey) {
         const cached = await cache.memoize(cacheKey, context, async () => null);
         if (cached) {
-          logger.info(`[Cache hit] ${context}`);
           return cached as EmbeddingResponse;
         }
       }
-
-      logger.info(`[Cache miss] ${context}`);
       
       // Retry logic: try up to 3 times
       let lastError: unknown = null;

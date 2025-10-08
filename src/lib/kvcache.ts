@@ -27,6 +27,7 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
         // Try to read from cache
         const cacheData = await fs.readFile(cachePath, 'utf-8');
         const entry: CacheEntry<T> = JSON.parse(cacheData);
+        logger.info(`[Cache hit] ${description}`);
         return entry.data;
       } catch (error) {
         // Cache miss, compute and store
@@ -36,6 +37,8 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
         if (result === null) {
           return result;
         }
+        
+        logger.info(`[Cache miss] ${description}`);
         
         try {
           ensureDirectoryExists(cachePath);
