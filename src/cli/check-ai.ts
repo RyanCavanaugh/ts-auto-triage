@@ -22,7 +22,7 @@ async function main() {
 
     // Embedding test (lightweight)
     try {
-      const embeddingResp = await ai.getEmbedding('validate-connection', undefined, 'AI connection validation test');
+      const embeddingResp = await ai.getEmbedding('validate-connection', 'AI connection validation test');
       logger.info(`Embedding validation OK: embedding length ${embeddingResp.embedding.length}. Tokens used: ${embeddingResp.usage?.total_tokens ?? 0}`);
     } catch (err) {
       logger.error(`Embedding test failed: ${err}`);

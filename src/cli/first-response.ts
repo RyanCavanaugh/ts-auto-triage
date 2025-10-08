@@ -221,7 +221,7 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
     ? currentIssueText.slice(0, config.ai.maxEmbeddingInputLength - 3) + '...'
     : currentIssueText;
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-  const currentEmbedding = await ai.getEmbedding(cappedText, undefined, `Get embedding for current issue ${issueKey}`);
+  const currentEmbedding = await ai.getEmbedding(cappedText, `Get embedding for current issue ${issueKey}`);
 
   // Get current issue's summaries for later use
   const currentIssueSummaries = summaries[issueKey] ?? [];

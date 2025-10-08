@@ -123,7 +123,7 @@ async function main() {
           const summary = summariesForIssue[i]!;
           // Cap the string length for embedding input to avoid API errors
           const cappedSummary = truncateText(summary, config.ai.maxEmbeddingInputLength);
-          const embeddingResponse = await ai.getEmbedding(cappedSummary, undefined, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
+          const embeddingResponse = await ai.getEmbedding(cappedSummary, `Get embedding of summary ${i + 1} for issue ${issueKey}`);
           
           // Convert to compact binary format (~3.8x compression vs JSON)
           const embeddingBase64 = embeddingToBase64(embeddingResponse.embedding);
