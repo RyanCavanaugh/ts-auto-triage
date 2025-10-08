@@ -396,6 +396,13 @@ export const CommentSummarySchema = z.object({
   }), z.null()]),
 });
 
+// One-sentence issue summary for newspaper reports
+export const OneSentenceSummarySchema = z.object({
+  summary: z.string(),
+});
+
+export type OneSentenceSummary = z.infer<typeof OneSentenceSummarySchema>;
+
 // Simple text response schemas for AI completions that previously used unstructured text
 export const TextResponseSchema = z.object({
   text: z.string(),

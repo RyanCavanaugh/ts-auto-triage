@@ -1,5 +1,5 @@
-import type { IssueRef, GitHubIssue, TimelineEvent, CommentSummary } from './schemas.js';
-import { CommentSummarySchema } from './schemas.js';
+import type { IssueRef, GitHubIssue, TimelineEvent, CommentSummary, OneSentenceSummary } from './schemas.js';
+import { CommentSummarySchema, OneSentenceSummarySchema } from './schemas.js';
 import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
 import { loadPrompt } from './prompts.js';
@@ -112,6 +112,37 @@ export function createNewspaperGenerator(
   };
 }
 
+async function generateOneSentenceSummary(
+  issue: GitHubIssue,
+  issueType: string,
+  ai: AIWrapper,
+  logger: Logger
+): Promise<OneSentenceSummary> {
+  const systemPrompt = await loadPrompt('one-sentence-summary-system');
+  const userPrompt = await loadPrompt('one-sentence-summary-user', {
+    issueType: issueType.toLowerCase(),
+    title: issue.title,
+    body: (issue.body ?? '').substring(0, 1000), // Truncate long bodies
+  });
+  
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userPrompt },
+  ];
+  
+  const response = await ai.completion<OneSentenceSummary>(
+    messages,
+    {
+      jsonSchema: OneSentenceSummarySchema,
+      maxTokens: 150,
+      context: `Generate one-sentence summary for ${issueType}`,
+      effort: 'Low',
+    }
+  );
+  
+  return response;
+}
+
 async function buildIssueSummary(
   issueRef: IssueRef,
   issue: GitHubIssue,
@@ -127,6 +158,14 @@ async function buildIssueSummary(
   
   let markdown = `### [${issueType} ${issueRef.owner}/${issueRef.repo}#${issueRef.number}](${issueUrl})\n\n`;
   markdown += `**${issue.title}**\n\n`;
+  
+  // Generate one-sentence summary
+  try {
+    const oneSentenceSummary = await generateOneSentenceSummary(issue, issueType, ai, logger);
+    markdown += `*${oneSentenceSummary.summary}*\n\n`;
+  } catch (error) {
+    logger.warn(`Failed to generate one-sentence summary for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}: ${error}`);
+  }
   
   const actions: ActionItem[] = [];
   
