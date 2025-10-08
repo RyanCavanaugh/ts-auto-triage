@@ -6,11 +6,33 @@ import { createKVCache } from './kvcache.js';
 import type z from 'zod';
 import { zodResponseFormat } from 'openai/helpers/zod.js';
 
+/**
+ * Cognitive effort level for AI operations
+ * - Low: Fast, simple tasks (e.g., quick checks, simple classifications)
+ * - Medium: Standard complexity tasks (default)
+ * - High: Complex reasoning tasks (e.g., generating reproduction steps, deep analysis)
+ */
+export type CognitiveEffort = 'Low' | 'Medium' | 'High';
+
 export interface AIConfig {
-  endpoint: string;
+  endpoints: {
+    low: string;
+    medium: string;
+    high: string;
+  };
   deployments: {
-    chat: string;
-    embeddings: string;
+    low: {
+      chat: string;
+      embeddings: string;
+    };
+    medium: {
+      chat: string;
+      embeddings: string;
+    };
+    high: {
+      chat: string;
+      embeddings: string;
+    };
   };
 }
 
@@ -42,6 +64,7 @@ export interface AIWrapper {
     temperature?: number;
     model?: string;
     context?: string; // Optional context for cache logging
+    effort?: CognitiveEffort; // Cognitive effort level (defaults to Medium)
   }): Promise<ChatCompletionResponse>;
 
   /**
@@ -61,45 +84,55 @@ export interface AIWrapper {
       temperature?: number;
       model?: string;
       context?: string; // Optional context for cache logging
+      effort?: CognitiveEffort; // Cognitive effort level (defaults to Medium)
     }
   ): Promise<T>;
 
-  getEmbedding(text: string, model?: string, context?: string): Promise<EmbeddingResponse>;
+  getEmbedding(text: string, model?: string, context?: string, effort?: CognitiveEffort): Promise<EmbeddingResponse>;
 }
 
 export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = true): AIWrapper {
   const cache = enableCache ? createKVCache(logger) : null;
 
-  // Create Azure OpenAI client with authentication
-  const client = (() => {
+  // Helper to create Azure OpenAI client with authentication for a given endpoint
+  const createClient = (endpoint: string): AzureOpenAI => {
     const apiKey = process.env.AZURE_OPENAI_API_KEY;
     if (apiKey) {
-      logger.debug('Using Azure OpenAI API key authentication');
+      logger.debug(`Using Azure OpenAI API key authentication for ${endpoint}`);
       return new AzureOpenAI({
-        endpoint: config.endpoint,
+        endpoint,
         apiKey,
         apiVersion: "2024-10-21"
       });
     } else {
-      logger.debug('Using Azure managed identity authentication');
+      logger.debug(`Using Azure managed identity authentication for ${endpoint}`);
       const credential = new DefaultAzureCredential();
       const scope = "https://cognitiveservices.azure.com/.default";
       const azureADTokenProvider = getBearerTokenProvider(credential, scope);
       return new AzureOpenAI({
-        endpoint: config.endpoint,
+        endpoint,
         azureADTokenProvider,
         apiVersion: "2024-10-21"
       });
     }
-  })();
+  };
+
+  // Create clients for each effort level
+  const clients = {
+    Low: createClient(config.endpoints.low),
+    Medium: createClient(config.endpoints.medium),
+    High: createClient(config.endpoints.high),
+  };
 
   return {
     async chatCompletion(messages: ChatMessage[], options = {}): Promise<ChatCompletionResponse> {
-      const model = options.model ?? config.deployments.chat;
-      const cacheKey = cache ? JSON.stringify({ messages, model, options }) : null;
+      const effort = options.effort ?? 'Medium';
+      const client = clients[effort];
+      const model = options.model ?? config.deployments[effort.toLowerCase() as 'low' | 'medium' | 'high'].chat;
+      const cacheKey = cache ? JSON.stringify({ messages, model, options, effort }) : null;
       
       // Create human-readable description for cache logging
-      const description = options.context ?? `Chat completion with ${model}`;
+      const description = options.context ?? `Chat completion with ${model} (${effort} effort)`;
       
       if (cache && cacheKey) {
         const cached = await cache.memoize(cacheKey, description, async () => null);
@@ -109,7 +142,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         }
       }
 
-      logger.debug(`Making chat completion request to ${model}`);
+      logger.debug(`Making chat completion request to ${model} (${effort} effort)`);
       
       try {
         const response = await client.chat.completions.create({
@@ -153,13 +186,16 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         temperature?: number;
         model?: string;
         context?: string; // Optional context for cache logging
+        effort?: CognitiveEffort; // Cognitive effort level (defaults to Medium)
       } = {}
     ): Promise<T> {
-      const model = options.model ?? config.deployments.chat;
-      const cacheKey = cache ? JSON.stringify({ messages, model, options, jsonSchema: zodResponseFormat(zodSchema, "response") }) : null;
+      const effort = options.effort ?? 'Medium';
+      const client = clients[effort];
+      const model = options.model ?? config.deployments[effort.toLowerCase() as 'low' | 'medium' | 'high'].chat;
+      const cacheKey = cache ? JSON.stringify({ messages, model, options, effort, jsonSchema: zodResponseFormat(zodSchema, "response") }) : null;
       
       // Create human-readable description for cache logging
-      const description = options.context ?? `Structured completion with ${model}`;
+      const description = options.context ?? `Structured completion with ${model} (${effort} effort)`;
       
       if (cache && cacheKey) {
         const cached = await cache.memoize(cacheKey, description, async () => null);
@@ -169,7 +205,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         }
       }
 
-      logger.debug(`Making structured completion request to ${model}`);
+      logger.debug(`Making structured completion request to ${model} (${effort} effort)`);
       
       try {
         const response = await client.chat.completions.create({
@@ -199,9 +235,11 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       }
     },
 
-    async getEmbedding(text: string, model?: string, context?: string): Promise<EmbeddingResponse> {
-      const embeddingModel = model ?? config.deployments.embeddings;
-      const cacheKey = cache ? JSON.stringify({ text, model: embeddingModel }) : null;
+    async getEmbedding(text: string, model?: string, context?: string, effort?: CognitiveEffort): Promise<EmbeddingResponse> {
+      const effortLevel = effort ?? 'Medium';
+      const client = clients[effortLevel];
+      const embeddingModel = model ?? config.deployments[effortLevel.toLowerCase() as 'low' | 'medium' | 'high'].embeddings;
+      const cacheKey = cache ? JSON.stringify({ text, model: embeddingModel, effort: effortLevel }) : null;
       
       // Create human-readable description for cache logging
       let description: string;
@@ -209,7 +247,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         description = context;
       } else {
         const textPreview = text.length > 50 ? text.slice(0, 50) + '...' : text;
-        description = `Embedding for text: "${textPreview}"`;
+        description = `Embedding for text: "${textPreview}" (${effortLevel} effort)`;
       }
       
       if (cache && cacheKey) {
@@ -220,7 +258,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         }
       }
 
-      logger.debug(`Making embedding request to ${embeddingModel}`);
+      logger.debug(`Making embedding request to ${embeddingModel} (${effortLevel} effort)`);
       
       try {
         const response = await client.embeddings.create({

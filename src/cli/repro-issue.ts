@@ -283,6 +283,7 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
   const response = await ai.structuredCompletion(messages, ReproCodeSchema, { 
     maxTokens: 2000,
     context: `Generate reproduction code for ${issueKey}`,
+    effort: 'High',
   });
   
   return response;
@@ -306,6 +307,7 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
    const response = await ai.structuredCompletion<ReproAnalysis>(messages, ReproAnalysisSchema, { 
      maxTokens: 500,
      context: `Analyze reproduction attempt for ${issueKey}`,
+     effort: 'High',
    });
    
    return response;
@@ -328,6 +330,7 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
    const response = await ai.structuredCompletion<FinalAnalysis>(messages, FinalAnalysisSchema, { 
      maxTokens: 800,
      context: `Generate final analysis for ${issueKey}`,
+     effort: 'High',
    });
    
    return response;

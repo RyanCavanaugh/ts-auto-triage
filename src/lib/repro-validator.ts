@@ -118,6 +118,7 @@ async function validateCompilerRepro(
   const validation = await ai.structuredCompletion(messages, BugRevalidationSchema, { 
     maxTokens: 500,
     context: `Validate compiler repro for ${issueKey}`,
+    effort: 'High',
   });
 
   return validation;
@@ -184,6 +185,7 @@ async function validateLSRepro(
   const validation = await ai.structuredCompletion(messages, BugRevalidationSchema, { 
     maxTokens: 500,
     context: `Validate LS repro for ${issueKey}`,
+    effort: 'High',
   });
 
   return validation;

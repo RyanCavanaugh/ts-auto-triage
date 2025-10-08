@@ -66,6 +66,7 @@ export function createFAQMatcher(
           const checkResponse = await ai.structuredCompletion(checkMessages, FAQEntryCheckSchema, {
             maxTokens: 200,
             context: `Check FAQ entry match for ${issueKey}: ${entry.title}`,
+            effort: 'Low',
           });
 
           // Unwrap the result from the wrapper object
@@ -91,6 +92,7 @@ export function createFAQMatcher(
           const writeupResponse = await ai.structuredCompletion(writeupMessages, FAQEntryWriteupSchema, {
             maxTokens: 500,
             context: `Generate FAQ writeup for ${issueKey}: ${entry.title}`,
+            effort: 'Medium',
           });
 
           const url = faqUrl ? `${faqUrl}#${entry.anchor}` : '';

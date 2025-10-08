@@ -45,6 +45,7 @@ export function createReproExtractor(
       const classification = await ai.structuredCompletion(messages, BugClassificationSchema, { 
         maxTokens: 500,
         context: `Classify bug type for ${issueKey}`,
+        effort: 'Medium',
       });
 
       logger.info(`Bug classified as: ${classification.bugType}`);
@@ -86,6 +87,7 @@ export function createReproExtractor(
         const reproSteps = await ai.structuredCompletion(messages, CompilerReproStepsSchema, { 
           maxTokens: 2000,
           context: `Generate compiler repro steps for ${issueKey}`,
+          effort: 'High',
         });
 
         return reproSteps;
@@ -109,6 +111,7 @@ export function createReproExtractor(
         const reproSteps = await ai.structuredCompletion(messages, LSReproStepsSchema, { 
           maxTokens: 2000,
           context: `Generate language service repro steps for ${issueKey}`,
+          effort: 'High',
         });
 
         return reproSteps;

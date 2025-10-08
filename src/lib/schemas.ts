@@ -104,10 +104,24 @@ export const ConfigSchema = z.object({
   }),
   azure: z.object({
     openai: z.object({
-      endpoint: z.string(),
+      endpoints: z.object({
+        low: z.string(),
+        medium: z.string(),
+        high: z.string(),
+      }),
       deployments: z.object({
-        chat: z.string(),
-        embeddings: z.string(),
+        low: z.object({
+          chat: z.string(),
+          embeddings: z.string(),
+        }),
+        medium: z.object({
+          chat: z.string(),
+          embeddings: z.string(),
+        }),
+        high: z.object({
+          chat: z.string(),
+          embeddings: z.string(),
+        }),
       }),
     }),
   }),
