@@ -72,8 +72,7 @@ async function processSuggestion(
   logger: unknown
 ): Promise<SuggestionSummary> {
   const aiWrapper = ai as { 
-    structuredCompletion: <T>(messages: Array<{ role: string; content: string }>, schema: unknown, options?: { maxTokens?: number; context?: string; effort?: string }) => Promise<T>;
-    chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string; effort?: string }) => Promise<{ content: string }>;
+    completion: <T = any>(messages: Array<{ role: string; content: string }>, options?: { jsonSchema?: unknown; maxTokens?: number; context?: string; effort?: string }) => Promise<T>;
   };
   const log = logger as { info: (msg: string) => void; debug: (msg: string) => void; warn: (msg: string) => void };
 
@@ -89,13 +88,13 @@ async function processSuggestion(
     body: escapeTextForPrompt(body),
   });
 
-  const currentSummary = await aiWrapper.structuredCompletion<SuggestionSummary>(
+  const currentSummary = await aiWrapper.completion<SuggestionSummary>(
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: initialPrompt },
     ],
-    SuggestionSummarySchema,
     {
+      jsonSchema: SuggestionSummarySchema,
       maxTokens: 2000,
       context: `Initial summary for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
       effort: 'Medium',
@@ -137,13 +136,13 @@ async function processSuggestion(
       commentBody: escapeTextForPrompt(commentBody),
     });
 
-    const result = await aiWrapper.structuredCompletion<CommentProcessingResult>(
+    const result = await aiWrapper.completion<CommentProcessingResult>(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: processPrompt },
       ],
-      CommentProcessingResultSchema,
       {
+        jsonSchema: CommentProcessingResultSchema,
         maxTokens: 2000,
         context: `Process comment ${i + 1} for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
         effort: 'Medium',
@@ -162,7 +161,7 @@ async function processSuggestion(
 
 // Generate a brief contextual summary of the OP and prior 3 comments
 async function generateContextSummary(
-  aiWrapper: { chatCompletion: (messages: Array<{ role: string; content: string }>, options?: { maxTokens?: number; context?: string; effort?: string }) => Promise<{ content: string }> },
+  aiWrapper: { completion: <T = any>(messages: Array<{ role: string; content: string }>, options?: { jsonSchema?: unknown; maxTokens?: number; context?: string; effort?: string }) => Promise<T> },
   issue: GitHubIssue,
   currentCommentIndex: number,
   config: Config,
@@ -188,7 +187,7 @@ async function generateContextSummary(
     priorComments: escapeTextForPrompt(priorCommentsText || '(no prior comments)'),
   });
 
-  const response = await aiWrapper.chatCompletion(
+  const response = await aiWrapper.completion(
     [{ role: 'user', content: contextPrompt }],
     {
       maxTokens: 500,
@@ -197,7 +196,7 @@ async function generateContextSummary(
     }
   );
   
-  return response.content;
+  return (response as { content: string }).content;
 }
 
 // Apply incremental updates from comment processing to the accumulated summary

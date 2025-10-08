@@ -66,7 +66,7 @@ export class DomainLabelTrigger implements CurationTrigger {
       },
     ];
 
-    const response = await ai.chatCompletion(messages, {
+    const response = await ai.completion(messages, {
       maxTokens: 100,
       context: `Determine domain label for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
       effort: 'Medium',

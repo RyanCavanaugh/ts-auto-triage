@@ -66,18 +66,25 @@ Because there are no members which use \`T\`, there is nothing to infer from.
 
     let callIndex = 0;
     const mockAI: AIWrapper = {
-      structuredCompletion: jest.fn().mockImplementation(async () => {
+      completion: jest.fn().mockImplementation(async () => {
         const responses = [
+          // First FAQ entry - check stage (matches)
           {
             result: {
               match: 'yes' as const,
               confidence: 9,
-              writeup: 'Your issue is asking about using `typeof T` in a generic function. This is a common question!\n\nIn TypeScript, generic type parameters like `T` only exist at compile time and are erased during compilation. At runtime, there is no `T` value to check with `typeof`.\n\nThe standard solution is to pass a constructor function as a parameter instead, which gives you a runtime value to work with.',
+              reasoning: 'Matches the typeof T question'
             }
           },
+          // First FAQ entry - writeup stage
+          {
+            writeup: 'Your issue is asking about using `typeof T` in a generic function. This is a common question!\n\nIn TypeScript, generic type parameters like `T` only exist at compile time and are erased during compilation. At runtime, there is no `T` value to check with `typeof`.\n\nThe standard solution is to pass a constructor function as a parameter instead, which gives you a runtime value to work with.',
+          },
+          // Second FAQ entry - check stage (no match)
           {
             result: {
               match: 'no' as const,
+              reasoning: 'Does not match'
             }
           },
         ];
@@ -129,13 +136,24 @@ Because there are no members which use \`T\`, there is nothing to infer from.
 This is a test FAQ entry that addresses the user's question.
 `);
 
+    let callIndex = 0;
     const mockAI: AIWrapper = {
-      structuredCompletion: jest.fn().mockResolvedValue({
-        result: {
-          match: 'yes' as const,
-          confidence: 8,
-          writeup: 'This FAQ entry addresses your concern about XYZ.',
-        }
+      completion: jest.fn().mockImplementation(async () => {
+        const responses = [
+          // Check stage
+          {
+            result: {
+              match: 'yes' as const,
+              confidence: 8,
+              reasoning: 'Matches the question'
+            }
+          },
+          // Writeup stage
+          {
+            writeup: 'This FAQ entry addresses your concern about XYZ.',
+          }
+        ];
+        return responses[callIndex++];
       }),
     } as unknown as AIWrapper;
 
@@ -201,7 +219,7 @@ This does not match the issue.
 `);
 
     const mockAI: AIWrapper = {
-      structuredCompletion: jest.fn().mockResolvedValue({
+      completion: jest.fn().mockResolvedValue({
         match: 'no' as const,
       }),
     } as unknown as AIWrapper;
@@ -258,11 +276,20 @@ Answer 3
 
     let callIndex = 0;
     const mockAI: AIWrapper = {
-      structuredCompletion: jest.fn().mockImplementation(async () => {
+      completion: jest.fn().mockImplementation(async () => {
         const responses = [
-          { result: { match: 'yes' as const, confidence: 3, writeup: 'Low confidence' } },
-          { result: { match: 'yes' as const, confidence: 9, writeup: 'High confidence' } },
-          { result: { match: 'yes' as const, confidence: 6, writeup: 'Medium confidence' } },
+          // Low confidence - check
+          { result: { match: 'yes' as const, confidence: 3, reasoning: 'Low confidence match' } },
+          // Low confidence - writeup
+          { writeup: 'Low confidence' },
+          // High confidence - check
+          { result: { match: 'yes' as const, confidence: 9, reasoning: 'High confidence match' } },
+          // High confidence - writeup
+          { writeup: 'High confidence' },
+          // Medium confidence - check
+          { result: { match: 'yes' as const, confidence: 6, reasoning: 'Medium confidence match' } },
+          // Medium confidence - writeup
+          { writeup: 'Medium confidence' },
         ];
         if (callIndex >= responses.length) {
           throw new Error(`Mock called more times than expected (${callIndex + 1} > ${responses.length})`);

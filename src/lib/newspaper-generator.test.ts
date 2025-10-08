@@ -13,8 +13,7 @@ describe('NewspaperGenerator', () => {
   };
 
   const mockAI: AIWrapper = {
-    chatCompletion: async () => ({ content: '', usage: { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 } }),
-    structuredCompletion: async () => ({ summary: 'test summary', action_needed: null }),
+    completion: async () => ({ summary: 'test summary', action_needed: null }),
     getEmbedding: async () => ({ embedding: [], usage: { total_tokens: 0, prompt_tokens: 0 } }),
   } as unknown as AIWrapper;
 
@@ -194,8 +193,7 @@ describe('NewspaperGenerator', () => {
     it('should filter bot comments from generating action items', async () => {
       // Mock AI that returns action needed for all comments
       const mockAIWithActions: AIWrapper = {
-        chatCompletion: async () => ({ content: '', usage: { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 } }),
-        structuredCompletion: async () => ({ 
+        completion: async () => ({ 
           summary: 'asked a question',
           action_needed: {
             category: 'response' as const,

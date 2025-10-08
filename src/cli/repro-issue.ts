@@ -280,7 +280,8 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
   ];
  
   const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-  const response = await ai.structuredCompletion(messages, ReproCodeSchema, { 
+  const response = await ai.completion(messages, { 
+    jsonSchema: ReproCodeSchema,
     maxTokens: 2000,
     context: `Generate reproduction code for ${issueKey}`,
     effort: 'High',
@@ -304,7 +305,8 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
    ];
  
    const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-   const response = await ai.structuredCompletion<ReproAnalysis>(messages, ReproAnalysisSchema, { 
+   const response = await ai.completion<ReproAnalysis>(messages, { 
+     jsonSchema: ReproAnalysisSchema,
      maxTokens: 500,
      context: `Analyze reproduction attempt for ${issueKey}`,
      effort: 'High',
@@ -327,7 +329,8 @@ async function generateReproductionCode(ai: AIWrapper, issue: GitHubIssue, issue
    ];
  
    const issueKey = `${issueRef.owner}/${issueRef.repo}#${issueRef.number}`;
-   const response = await ai.structuredCompletion<FinalAnalysis>(messages, FinalAnalysisSchema, { 
+   const response = await ai.completion<FinalAnalysis>(messages, { 
+     jsonSchema: FinalAnalysisSchema,
      maxTokens: 800,
      context: `Generate final analysis for ${issueKey}`,
      effort: 'High',

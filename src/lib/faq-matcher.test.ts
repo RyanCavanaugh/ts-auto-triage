@@ -52,7 +52,7 @@ Answer 3
 
       let callCount = 0;
       const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockImplementation(async () => {
+        completion: jest.fn().mockImplementation(async () => {
           callCount++;
           // All entries return no match (stage 1 check only)
           return { result: { match: 'no', reasoning: 'Not a match' } };
@@ -92,7 +92,7 @@ Answer 3
 
       let callIndex = 0;
       const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockImplementation(async () => {
+        completion: jest.fn().mockImplementation(async () => {
           // Two-stage responses: check then writeup for each matched entry
           const responses = [
             // Entry 1: Low confidence - check
@@ -149,7 +149,7 @@ This also matches
 
       let callIndex = 0;
       const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockImplementation(async () => {
+        completion: jest.fn().mockImplementation(async () => {
           const responses = [
             // Entry 1: Match - check
             { result: { match: 'yes' as const, confidence: 7, reasoning: 'Match' } },
@@ -194,7 +194,7 @@ Test answer
 
       let capturedBody = '';
       const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockImplementation(async (messages) => {
+        completion: jest.fn().mockImplementation(async (messages) => {
           const userMessage = messages.find((m: { role: string }) => m.role === 'user');
           if (userMessage) {
             capturedBody = userMessage.content;
@@ -235,7 +235,7 @@ This does not match
       const callLog: string[] = [];
       let callCount = 0;
       const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockImplementation(async (messages, schema) => {
+        completion: jest.fn().mockImplementation(async (messages, schema) => {
           // Track calls by counting - check stage returns discriminated union, writeup returns simple object
           callCount++;
           // Pattern: check, writeup, check (for 2 FAQ entries where 1st matches, 2nd doesn't)

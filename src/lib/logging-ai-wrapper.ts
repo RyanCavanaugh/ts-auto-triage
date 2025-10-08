@@ -11,48 +11,32 @@ export function createLoggingAIWrapper(
   fileLogger: FileLogger
 ): AIWrapper {
   return {
-    async chatCompletion(messages: ChatMessage[], options?: {
-      maxTokens?: number;
-      temperature?: number;
-      model?: string;
-      context?: string;
-    }) {
-      const context = options?.context ?? 'Chat completion';
-      
-      // Log input
-      await fileLogger.logLLMInput(context, messages);
-      
-      // Make the actual call
-      const result = await ai.chatCompletion(messages, options);
-      
-      // Log output
-      await fileLogger.logLLMOutput(context, { content: result.content }, result.usage);
-      
-      return result;
-    },
-
-    async structuredCompletion<T>(
+    async completion<T = any>(
       messages: ChatMessage[],
-      jsonSchema: z.ZodSchema<T>,
       options?: {
+        jsonSchema?: z.ZodSchema<T>;
         maxTokens?: number;
         temperature?: number;
         model?: string;
         context?: string;
       }
-    ): Promise<T> {
-      const context = options?.context ?? 'Structured completion';
+    ): Promise<any> {
+      const context = options?.context ?? (options?.jsonSchema ? 'Structured completion' : 'Chat completion');
       
       // Log input
       await fileLogger.logLLMInput(context, messages);
       
       // Make the actual call
-      const result = await ai.structuredCompletion(messages, jsonSchema, options);
+      const result = await ai.completion(messages, options as any);
       
-      // Log output - we need to get usage info somehow
-      // Since the base AI wrapper doesn't return usage with structured completions,
-      // we'll log without it
-      await fileLogger.logLLMOutput(context, result);
+      // Log output
+      if (options?.jsonSchema) {
+        // Structured completion - log the parsed result
+        await fileLogger.logLLMOutput(context, result);
+      } else {
+        // Chat completion - log content and usage
+        await fileLogger.logLLMOutput(context, { content: (result as any).content }, (result as any).usage);
+      }
       
       return result;
     },

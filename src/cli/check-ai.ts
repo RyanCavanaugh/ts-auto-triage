@@ -43,7 +43,7 @@ async function main() {
         },
       ];
 
-      const chatResp = await ai.chatCompletion(messages, { 
+      const chatResp = await ai.completion(messages, { 
         maxTokens: 20,
         context: 'AI chat completion validation test',
         effort: 'Medium',

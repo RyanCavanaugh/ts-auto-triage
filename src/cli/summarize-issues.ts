@@ -137,7 +137,8 @@ async function createIssueSummaries(ai: AIWrapper, issue: GitHubIssue, config: C
     { role: 'user' as const, content: userPrompt },
   ];
 
-  const response = await ai.structuredCompletion<IssueSummaries>(messages, IssueSummariesSchema, { 
+  const response = await ai.completion<IssueSummaries>(messages, { 
+    jsonSchema: IssueSummariesSchema,
     maxTokens: 1200,
     context: `Get issue summary for ${issueKey}`,
     effort: 'Low',
