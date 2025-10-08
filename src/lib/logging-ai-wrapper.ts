@@ -10,54 +10,34 @@ export function createLoggingAIWrapper(
   ai: AIWrapper,
   fileLogger: FileLogger
 ): AIWrapper {
-  return {
-    async chatCompletion(messages: ChatMessage[], options?: {
-      maxTokens?: number;
-      temperature?: number;
-      model?: string;
-      context?: string;
-    }) {
-      const context = options?.context ?? 'Chat completion';
-      
-      // Log input
-      await fileLogger.logLLMInput(context, messages);
-      
-      // Make the actual call
-      const result = await ai.chatCompletion(messages, options);
-      
-      // Log output
-      await fileLogger.logLLMOutput(context, { content: result.content }, result.usage);
-      
-      return result;
-    },
-
-    async structuredCompletion<T>(
+  // Create wrapper with proper types
+  const wrapper: AIWrapper = {
+    completion: (async <T>(
       messages: ChatMessage[],
-      jsonSchema: z.ZodSchema<T>,
-      options?: {
+      options: {
+        jsonSchema: z.ZodSchema<T>;
         maxTokens?: number;
         temperature?: number;
         model?: string;
         context?: string;
+        effort?: string;
       }
-    ): Promise<T> {
-      const context = options?.context ?? 'Structured completion';
+    ): Promise<T> => {
+      const context = options.context ?? 'Structured completion';
       
       // Log input
       await fileLogger.logLLMInput(context, messages);
       
-      // Make the actual call
-      const result = await ai.structuredCompletion(messages, jsonSchema, options);
+      // Make the actual call - need to cast to work around type inference
+      const result = await ai.completion<T>(messages, options as any);
       
-      // Log output - we need to get usage info somehow
-      // Since the base AI wrapper doesn't return usage with structured completions,
-      // we'll log without it
+      // Log output (structured result)
       await fileLogger.logLLMOutput(context, result);
       
       return result;
-    },
+    }) as AIWrapper['completion'],
 
-    async getEmbedding(text: string, model?: string, context?: string) {
+    getEmbedding: async (text: string, model?: string, context?: string) => {
       const embeddingContext = context ?? 'Get embedding';
       
       // Log input
@@ -76,4 +56,6 @@ export function createLoggingAIWrapper(
       return result;
     },
   };
+  
+  return wrapper;
 }

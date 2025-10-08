@@ -287,10 +287,10 @@ async function summarizeComment(
     { role: 'user' as const, content: userPrompt },
   ];
   
-  const response = await ai.structuredCompletion<CommentSummary>(
+  const response = await ai.completion<CommentSummary>(
     messages,
-    CommentSummarySchema,
     {
+      jsonSchema: CommentSummarySchema,
       maxTokens: 300,
       context: `Summarize comment by ${actor}`,
       effort: 'Low',

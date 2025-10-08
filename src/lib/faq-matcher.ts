@@ -63,7 +63,8 @@ export function createFAQMatcher(
             { role: 'user' as const, content: checkUserPrompt },
           ];
 
-          const checkResponse = await ai.structuredCompletion(checkMessages, FAQEntryCheckSchema, {
+          const checkResponse = await ai.completion(checkMessages, {
+            jsonSchema: FAQEntryCheckSchema,
             maxTokens: 200,
             context: `Check FAQ entry match for ${issueKey}: ${entry.title}`,
             effort: 'Low',
@@ -89,7 +90,8 @@ export function createFAQMatcher(
             { role: 'user' as const, content: writeupUserPrompt },
           ];
 
-          const writeupResponse = await ai.structuredCompletion(writeupMessages, FAQEntryWriteupSchema, {
+          const writeupResponse = await ai.completion(writeupMessages, {
+            jsonSchema: FAQEntryWriteupSchema,
             maxTokens: 500,
             context: `Generate FAQ writeup for ${issueKey}: ${entry.title}`,
             effort: 'High',

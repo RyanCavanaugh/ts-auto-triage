@@ -1,4 +1,5 @@
 import type { GitHubIssue, IssueRef, IssueAction, Config } from '../schemas.js';
+import { TextResponseSchema } from '../schemas.js';
 import type { AIWrapper } from '../ai-wrapper.js';
 import type { Logger } from '../utils.js';
 import { loadPrompt } from '../prompts.js';
@@ -136,16 +137,17 @@ export class MaintainerResponseTrigger implements CurationTrigger {
         },
       ];
 
-      const response = await ai.chatCompletion(messages, {
+      const response = await ai.completion(messages, {
+        jsonSchema: TextResponseSchema,
         maxTokens: 300,
         context: `Duplicate check for ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
         effort: 'Medium',
       });
 
       // Check if AI confirms these are likely duplicates
-      const content = response.content.toLowerCase();
+      const content = response.text.toLowerCase();
       if (content.includes('duplicate') || content.includes('similar') || content.includes('related')) {
-        return `## Potential Duplicates Found\n\n${response.content}\n\n### Similar Issues:\n${similarIssuesList}`;
+        return `## Potential Duplicates Found\n\n${response.text}\n\n### Similar Issues:\n${similarIssuesList}`;
       }
 
       return null;
