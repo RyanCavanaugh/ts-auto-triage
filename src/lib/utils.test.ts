@@ -1,4 +1,4 @@
-import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, formatActionsAsMarkdown } from './utils.js';
+import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, formatActionsAsMarkdown, parseRepoRef } from './utils.js';
 import type { IssueAction } from './schemas.js';
 
 describe('Utils', () => {
@@ -21,8 +21,57 @@ describe('Utils', () => {
       });
     });
 
+    it('should parse bare issue number with defaultRepo', () => {
+      const result = parseIssueRef('#1234', 'Microsoft/TypeScript');
+      expect(result).toEqual({
+        owner: 'Microsoft',
+        repo: 'TypeScript',
+        number: 1234,
+      });
+    });
+
+    it('should parse bare issue number without hash with defaultRepo', () => {
+      const result = parseIssueRef('1234', 'Microsoft/TypeScript');
+      expect(result).toEqual({
+        owner: 'Microsoft',
+        repo: 'TypeScript',
+        number: 1234,
+      });
+    });
+
     it('should throw error for invalid format', () => {
       expect(() => parseIssueRef('invalid-format')).toThrow('Invalid issue reference format');
+    });
+
+    it('should throw error for bare number without defaultRepo', () => {
+      expect(() => parseIssueRef('#1234')).toThrow('Invalid issue reference format');
+    });
+
+    it('should throw error for invalid defaultRepo format', () => {
+      expect(() => parseIssueRef('#1234', 'invalid')).toThrow('Invalid defaultRepo format');
+    });
+  });
+
+  describe('parseRepoRef', () => {
+    it('should parse valid repo reference', () => {
+      const result = parseRepoRef('Microsoft/TypeScript');
+      expect(result).toEqual({
+        owner: 'Microsoft',
+        repo: 'TypeScript',
+      });
+    });
+
+    it('should throw error for invalid format with one part', () => {
+      expect(() => parseRepoRef('Microsoft')).toThrow('Invalid repository format');
+    });
+
+    it('should throw error for invalid format with three parts', () => {
+      expect(() => parseRepoRef('Microsoft/TypeScript/Extra')).toThrow('Invalid repository format');
+    });
+
+    it('should throw error for empty parts', () => {
+      expect(() => parseRepoRef('/TypeScript')).toThrow('Invalid repository format');
+      expect(() => parseRepoRef('Microsoft/')).toThrow('Invalid repository format');
     });
   });
 

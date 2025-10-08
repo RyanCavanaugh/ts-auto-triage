@@ -1,6 +1,92 @@
 import { describe, expect, test } from '@jest/globals';
-import { FAQResponseSchema } from './schemas.js';
+import { FAQResponseSchema, ConfigSchema } from './schemas.js';
 import { zodResponseFormat } from 'openai/helpers/zod.js';
+
+describe('Config Schema', () => {
+  test('should accept config without repositories and defaultRepo', () => {
+    const data = {
+      typescript: {
+        tscPath: 'tsc',
+        lspEntryPoint: 'typescript-language-server',
+      },
+      azure: {
+        openai: {
+          endpoints: {
+            low: 'https://test.openai.azure.com/',
+            medium: 'https://test.openai.azure.com/',
+            high: 'https://test.openai.azure.com/',
+          },
+          deployments: {
+            low: { chat: 'gpt-4', embeddings: 'text-embedding-3-large' },
+            medium: { chat: 'gpt-4', embeddings: 'text-embedding-3-large' },
+            high: { chat: 'gpt-4', embeddings: 'text-embedding-3-large' },
+          },
+        },
+      },
+      github: {
+        maxIssueBodyLength: 8000,
+        maxCommentLength: 2000,
+        rateLimitRetryDelay: 5000,
+        maxRetries: 3,
+        faqUrl: 'https://github.com/microsoft/TypeScript/wiki/FAQ',
+        bots: ['typescript-bot'],
+      },
+      ai: {
+        maxReproAttempts: 3,
+        cacheEnabled: true,
+        maxEmbeddingInputLength: 8000,
+      },
+    };
+
+    const result = ConfigSchema.safeParse(data);
+    expect(result.success).toBe(true);
+  });
+
+  test('should accept config with repositories and defaultRepo', () => {
+    const data = {
+      typescript: {
+        tscPath: 'tsc',
+        lspEntryPoint: 'typescript-language-server',
+      },
+      azure: {
+        openai: {
+          endpoints: {
+            low: 'https://test.openai.azure.com/',
+            medium: 'https://test.openai.azure.com/',
+            high: 'https://test.openai.azure.com/',
+          },
+          deployments: {
+            low: { chat: 'gpt-4', embeddings: 'text-embedding-3-large' },
+            medium: { chat: 'gpt-4', embeddings: 'text-embedding-3-large' },
+            high: { chat: 'gpt-4', embeddings: 'text-embedding-3-large' },
+          },
+        },
+      },
+      github: {
+        maxIssueBodyLength: 8000,
+        maxCommentLength: 2000,
+        rateLimitRetryDelay: 5000,
+        maxRetries: 3,
+        faqUrl: 'https://github.com/microsoft/TypeScript/wiki/FAQ',
+        bots: ['typescript-bot'],
+      },
+      ai: {
+        maxReproAttempts: 3,
+        cacheEnabled: true,
+        maxEmbeddingInputLength: 8000,
+      },
+      repositories: ['microsoft/TypeScript', 'microsoft/TypeScript-Website'],
+      defaultRepo: 'microsoft/TypeScript',
+    };
+
+    const result = ConfigSchema.safeParse(data);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.repositories).toEqual(['microsoft/TypeScript', 'microsoft/TypeScript-Website']);
+      expect(result.data.defaultRepo).toBe('microsoft/TypeScript');
+    }
+  });
+});
 
 describe('FAQ Response Schema', () => {
   test('should accept response with has_match true and response string', () => {
