@@ -4,6 +4,7 @@ import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
 import { loadPrompt } from './prompts.js';
 import removeMd from 'remove-markdown';
+import { z } from 'zod';
 
 export interface NewspaperGenerator {
   generateDailyReport(
@@ -125,19 +126,54 @@ async function buildIssueSummary(
   const issueUrl = `https://github.com/${issueRef.owner}/${issueRef.repo}/${issue.is_pull_request ? 'pull' : 'issues'}/${issueRef.number}`;
   const issueType = issue.is_pull_request ? 'Pull Request' : 'Issue';
   
+  // Generate one-sentence AI summary of the issue
+  let oneSentenceSummary = '';
+  try {
+    const systemPrompt = await loadPrompt('summarize-issue-oneline-system');
+    const userPrompt = await loadPrompt('summarize-issue-oneline-user', {
+      title: issue.title,
+      body: (issue.body ?? '').substring(0, 2000), // Truncate very long bodies
+    });
+    
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      { role: 'user' as const, content: userPrompt },
+    ];
+    
+    const response = await ai.completion<{ text: string }>(
+      messages,
+      {
+        jsonSchema: z.object({ text: z.string() }),
+        maxTokens: 100,
+        context: `Summarize issue ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
+        effort: 'Low',
+      }
+    );
+    
+    oneSentenceSummary = response.text;
+  } catch (error) {
+    logger.warn(`Failed to generate one-sentence summary for issue ${issueRef.owner}/${issueRef.repo}#${issueRef.number}: ${error}`);
+    // Fallback to just the title
+    oneSentenceSummary = issue.title;
+  }
+  
   let markdown = `### [${issueType} ${issueRef.owner}/${issueRef.repo}#${issueRef.number}](${issueUrl})\n\n`;
   markdown += `**${issue.title}**\n\n`;
+  markdown += `*${oneSentenceSummary}*\n\n`;
   
   const actions: ActionItem[] = [];
   
-  // Collect all events (issue creation + comments + state changes)
+  // Collect all events (issue creation + comments + timeline events)
   interface Event {
     date: Date;
-    type: 'created' | 'commented' | 'closed' | 'reopened';
+    type: 'created' | 'commented' | 'closed' | 'reopened' | 'labeled' | 'unlabeled' | 'milestoned' | 'demilestoned' | 'assigned' | 'unassigned';
     actor: string;
     body?: string;
     author_association?: string;
     comment_id?: number;
+    label_name?: string;
+    milestone_title?: string;
+    assignee_login?: string;
   }
   
   const allEvents: Event[] = [];
@@ -161,13 +197,68 @@ async function buildIssueSummary(
     });
   }
   
-  // Add closed event if applicable
-  if (issue.closed_at) {
-    allEvents.push({
-      date: new Date(issue.closed_at),
-      type: issue.state === 'closed' ? 'closed' : 'reopened',
-      actor: 'unknown', // We don't have this info in the cached data
-    });
+  // Add timeline events
+  if (issue.timeline_events) {
+    for (const event of issue.timeline_events) {
+      const eventDate = new Date(event.created_at);
+      const actor = event.actor?.login ?? 'unknown';
+      
+      if (event.event === 'closed') {
+        allEvents.push({
+          date: eventDate,
+          type: 'closed',
+          actor,
+        });
+      } else if (event.event === 'reopened') {
+        allEvents.push({
+          date: eventDate,
+          type: 'reopened',
+          actor,
+        });
+      } else if (event.event === 'labeled' && event.label) {
+        allEvents.push({
+          date: eventDate,
+          type: 'labeled',
+          actor,
+          label_name: event.label.name,
+        });
+      } else if (event.event === 'unlabeled' && event.label) {
+        allEvents.push({
+          date: eventDate,
+          type: 'unlabeled',
+          actor,
+          label_name: event.label.name,
+        });
+      } else if (event.event === 'milestoned' && event.milestone) {
+        allEvents.push({
+          date: eventDate,
+          type: 'milestoned',
+          actor,
+          milestone_title: event.milestone.title,
+        });
+      } else if (event.event === 'demilestoned' && event.milestone) {
+        allEvents.push({
+          date: eventDate,
+          type: 'demilestoned',
+          actor,
+          milestone_title: event.milestone.title,
+        });
+      } else if (event.event === 'assigned' && event.assignee) {
+        allEvents.push({
+          date: eventDate,
+          type: 'assigned',
+          actor,
+          assignee_login: event.assignee.login,
+        });
+      } else if (event.event === 'unassigned' && event.assignee) {
+        allEvents.push({
+          date: eventDate,
+          type: 'unassigned',
+          actor,
+          assignee_login: event.assignee.login,
+        });
+      }
+    }
   }
   
   // Sort by date
@@ -199,7 +290,17 @@ async function buildIssueSummary(
 }
 
 async function formatEvent(
-  event: { date: Date; type: string; actor: string; body?: string; author_association?: string; comment_id?: number },
+  event: { 
+    date: Date; 
+    type: string; 
+    actor: string; 
+    body?: string; 
+    author_association?: string; 
+    comment_id?: number;
+    label_name?: string;
+    milestone_title?: string;
+    assignee_login?: string;
+  },
   issueUrl: string,
   timeDesc: string,
   issueRef: IssueRef,
@@ -217,6 +318,18 @@ async function formatEvent(
     return `${actorName} closed the issue`;
   } else if (event.type === 'reopened') {
     return `${actorName} reopened the issue`;
+  } else if (event.type === 'labeled' && event.label_name) {
+    return `${actorName} added label \`${event.label_name}\``;
+  } else if (event.type === 'unlabeled' && event.label_name) {
+    return `${actorName} removed label \`${event.label_name}\``;
+  } else if (event.type === 'milestoned' && event.milestone_title) {
+    return `${actorName} added to milestone \`${event.milestone_title}\``;
+  } else if (event.type === 'demilestoned' && event.milestone_title) {
+    return `${actorName} removed from milestone \`${event.milestone_title}\``;
+  } else if (event.type === 'assigned' && event.assignee_login) {
+    return `${actorName} assigned to **${event.assignee_login}**`;
+  } else if (event.type === 'unassigned' && event.assignee_login) {
+    return `${actorName} unassigned **${event.assignee_login}**`;
   } else if (event.type === 'commented' && event.body) {
     const authorAssociation = event.author_association ?? 'NONE';
     const isContributorOrOwner = authorAssociation === 'CONTRIBUTOR' || authorAssociation === 'OWNER' || authorAssociation === 'MEMBER';
