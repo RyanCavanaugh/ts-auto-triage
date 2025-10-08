@@ -102,7 +102,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       return new AzureOpenAI({
         endpoint,
         apiKey,
-        apiVersion: "2024-10-21"
+        apiVersion: "2025-04-01-preview"
       });
     } else {
       logger.debug(`Using Azure managed identity authentication for ${endpoint}`);
@@ -112,7 +112,7 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       return new AzureOpenAI({
         endpoint,
         azureADTokenProvider,
-        apiVersion: "2024-10-21"
+        apiVersion: "2025-04-01-preview"
       });
     }
   };
@@ -142,26 +142,33 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         }
       }
 
-      logger.debug(`Making chat completion request to ${model} (${effort} effort)`);
+      logger.debug(`Making response request to ${model} (${effort} effort)`);
       
       try {
-        const response = await client.chat.completions.create({
+        // Convert messages to responses API format
+        const inputItems = messages.map(msg => ({
+          type: 'message' as const,
+          role: msg.role,
+          content: msg.content
+        }));
+
+        const response = await client.responses.create({
           model: model,
-          messages: messages,
-          max_tokens: options.maxTokens ?? null,
+          input: inputItems,
+          max_output_tokens: options.maxTokens ?? null,
           temperature: options.temperature ?? null,
         });
 
-        const choice = response.choices[0];
-        if (!choice?.message?.content) {
+        // Extract text from response output
+        if (!response.output_text) {
           throw new Error('No content received from Azure OpenAI');
         }
 
         const result: ChatCompletionResponse = {
-          content: choice.message.content,
+          content: response.output_text,
           usage: response.usage ? {
-            prompt_tokens: response.usage.prompt_tokens,
-            completion_tokens: response.usage.completion_tokens,
+            prompt_tokens: response.usage.input_tokens,
+            completion_tokens: response.usage.output_tokens,
             total_tokens: response.usage.total_tokens,
           } : undefined,
         };
@@ -170,10 +177,10 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
           await cache.memoize(cacheKey, description, async () => result);
         }
 
-        logger.debug(`Chat completion successful, ${result.usage?.total_tokens ?? 0} tokens used`);
+        logger.debug(`Response successful, ${result.usage?.total_tokens ?? 0} tokens used`);
         return result;
       } catch (error) {
-        logger.error(`Azure OpenAI chat completion failed: ${error}`);
+        logger.error(`Azure OpenAI response failed: ${error}`);
         throw error;
       }
     },
@@ -205,32 +212,49 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
         }
       }
 
-      logger.debug(`Making structured completion request to ${model} (${effort} effort)`);
+      logger.debug(`Making structured response request to ${model} (${effort} effort)`);
       
       try {
-        const response = await client.chat.completions.create({
+        // Convert messages to responses API format
+        const inputItems = messages.map(msg => ({
+          type: 'message' as const,
+          role: msg.role,
+          content: msg.content
+        }));
+
+        // Get the JSON schema from zodResponseFormat
+        const responseFormat = zodResponseFormat(zodSchema, "response");
+
+        const response = await client.responses.create({
           model: model,
-          messages: messages,
-          max_tokens: options.maxTokens ?? null,
+          input: inputItems,
+          max_output_tokens: options.maxTokens ?? null,
           temperature: options.temperature ?? null,
-          response_format: zodResponseFormat(zodSchema, "response")
+          text: {
+            format: {
+              type: 'json_schema' as const,
+              name: responseFormat.json_schema.name,
+              schema: responseFormat.json_schema.schema as { [key: string]: unknown },
+              strict: responseFormat.json_schema.strict ?? null,
+            }
+          }
         });
 
-        const choice = response.choices[0];
-        if (!choice?.message?.content) {
+        // Extract and parse the JSON output
+        if (!response.output_text) {
           throw new Error('No content received from Azure OpenAI');
         }
 
-        let result: T = zodSchema.parse(JSON.parse(choice.message.content));
+        let result: T = zodSchema.parse(JSON.parse(response.output_text));
 
         if (cache && cacheKey) {
           await cache.memoize(cacheKey, description, async () => result);
         }
 
-        logger.debug(`Structured completion successful, ${response.usage?.total_tokens ?? 0} tokens used`);
+        logger.debug(`Structured response successful, ${response.usage?.total_tokens ?? 0} tokens used`);
         return result;
       } catch (error) {
-        logger.error(`Azure OpenAI structured completion failed: ${error}`);
+        logger.error(`Azure OpenAI structured response failed: ${error}`);
         throw error;
       }
     },
