@@ -72,15 +72,13 @@ export interface AIWrapper {
     messages: ChatMessage[],
     options: {
       jsonSchema: z.ZodSchema<T>;
+      context: string; // Required context for logging and debugging
       maxTokens?: number;
-      temperature?: number;
-      model?: string;
-      context?: string; // Optional context for cache logging
       effort?: CognitiveEffort; // Cognitive effort level (defaults to Medium)
     }
   ): Promise<T>;
 
-  getEmbedding(text: string, model?: string, context?: string, effort?: CognitiveEffort): Promise<EmbeddingResponse>;
+  getEmbedding(text: string, context: string, effort?: CognitiveEffort): Promise<EmbeddingResponse>;
 }
 
 export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = true): AIWrapper {
@@ -121,142 +119,144 @@ export function createAIWrapper(config: AIConfig, logger: Logger, enableCache = 
       messages: ChatMessage[],
       options: {
         jsonSchema: z.ZodSchema<T>;
+        context: string;
         maxTokens?: number;
-        temperature?: number;
-        model?: string;
-        context?: string;
         effort?: CognitiveEffort;
       }
     ): Promise<T> {
       const effort = options.effort ?? 'Medium';
       const client = clients[effort];
-      const model = options.model ?? config.deployments[effort.toLowerCase() as 'low' | 'medium' | 'high'].chat;
+      const model = config.deployments[effort.toLowerCase() as 'low' | 'medium' | 'high'].chat;
       const zodSchema = options.jsonSchema;
       
       // Include jsonSchema in cache key
       const cacheKey = cache ? JSON.stringify({ 
         messages, 
         model, 
-        options, 
+        maxTokens: options.maxTokens,
         effort,
         jsonSchema: zodTextFormat(zodSchema, "response")
       }) : null;
       
-      // Create human-readable description for cache logging
-      const description = options.context ?? `Structured completion with ${model} (${effort} effort)`;
-      
       if (cache && cacheKey) {
-        const cached = await cache.memoize(cacheKey, description, async () => null);
+        const cached = await cache.memoize(cacheKey, options.context, async () => null);
         if (cached) {
-          logger.debug('Using cached structured completion');
+          logger.info(`[Cache hit] ${options.context}`);
           return cached as T;
         }
       }
 
-      logger.debug(`Making structured response request to ${model} (${effort} effort)`);
+      logger.info(`[Cache miss] ${options.context}`);
       
-      try {
-        // Convert messages to responses API format
-        const inputItems = messages.map(msg => ({
-          type: 'message' as const,
-          role: msg.role,
-          content: msg.content
-        }));
-
-        const response = await client.responses.create({
-          model: model,
-          input: inputItems,
-          max_output_tokens: options.maxTokens ?? null,
-          temperature: options.temperature ?? null,
-          text: {
-            format: zodTextFormat(zodSchema, "response")
-          }
-        });
-
-        // Extract and parse the JSON output
-        if (!response.output_text) {
-          console.error(JSON.stringify(response, null, 2));
-          process.exit(-1);
-          // throw new Error('No content received from Azure OpenAI');
-        }
-
-        let parseResult: object;
+      // Retry logic: try up to 3 times
+      let lastError: unknown = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          parseResult = JSON.parse(response.output_text);
-        } catch (e) {
-          console.error(`Failed to parse JSON response: ${e}\nResponse text: ${response.output_text}`);
-          process.exit(-1);
+          // Convert messages to responses API format
+          const inputItems = messages.map(msg => ({
+            type: 'message' as const,
+            role: msg.role,
+            content: msg.content
+          }));
+
+          const response = await client.responses.create({
+            model: model,
+            input: inputItems,
+            max_output_tokens: options.maxTokens ?? null,
+            temperature: null,
+            text: {
+              format: zodTextFormat(zodSchema, "response")
+            }
+          });
+
+          // Extract and parse the JSON output
+          if (!response.output_text) {
+            throw new Error(`No content received from Azure OpenAI. Response: ${JSON.stringify(response, null, 2)}`);
+          }
+
+          const parseResult: object = JSON.parse(response.output_text);
+          const result: T = zodSchema.parse(parseResult);
+
+          if (cache && cacheKey) {
+            await cache.memoize(cacheKey, options.context, async () => result);
+          }
+
+          logger.debug(`Completion successful (attempt ${attempt}/3), ${response.usage?.total_tokens ?? 0} tokens used`);
+          return result;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 3) {
+            logger.warn(`Completion failed (attempt ${attempt}/3), retrying: ${error}`);
+          }
         }
-
-        const result: T = zodSchema.parse(parseResult);
-
-        if (cache && cacheKey) {
-          await cache.memoize(cacheKey, description, async () => result);
-        }
-
-        logger.debug(`Structured response successful, ${response.usage?.total_tokens ?? 0} tokens used`);
-        return result;
-      } catch (error) {
-        console.error(error);
-        logger.error(`Azure OpenAI structured response failed: ${error}`);
-        throw error;
       }
+      
+      // All retries failed
+      logger.error(`AI completion failed after 3 attempts for: ${options.context}`);
+      logger.error(`Last error: ${lastError}`);
+      logger.error(`Messages: ${JSON.stringify(messages, null, 2)}`);
+      logger.error(`Options: ${JSON.stringify({ effort, model, maxTokens: options.maxTokens }, null, 2)}`);
+      process.exit(1);
     },
 
-    async getEmbedding(text: string, model?: string, context?: string, effort?: CognitiveEffort): Promise<EmbeddingResponse> {
+    async getEmbedding(text: string, context: string, effort?: CognitiveEffort): Promise<EmbeddingResponse> {
       const effortLevel = effort ?? 'Medium';
       const client = clients[effortLevel];
-      const embeddingModel = model ?? config.deployments[effortLevel.toLowerCase() as 'low' | 'medium' | 'high'].embeddings;
+      const embeddingModel = config.deployments[effortLevel.toLowerCase() as 'low' | 'medium' | 'high'].embeddings;
       const cacheKey = cache ? JSON.stringify({ text, model: embeddingModel, effort: effortLevel }) : null;
       
-      // Create human-readable description for cache logging
-      let description: string;
-      if (context) {
-        description = context;
-      } else {
-        const textPreview = text.length > 50 ? text.slice(0, 50) + '...' : text;
-        description = `Embedding for text: "${textPreview}" (${effortLevel} effort)`;
-      }
-      
       if (cache && cacheKey) {
-        const cached = await cache.memoize(cacheKey, description, async () => null);
+        const cached = await cache.memoize(cacheKey, context, async () => null);
         if (cached) {
-          logger.debug('Using cached embedding');
+          logger.info(`[Cache hit] ${context}`);
           return cached as EmbeddingResponse;
         }
       }
 
-      logger.debug(`Making embedding request to ${embeddingModel} (${effortLevel} effort)`);
+      logger.info(`[Cache miss] ${context}`);
       
-      try {
-        const response = await client.embeddings.create({
-          model: embeddingModel,
-          input: text,
-        });
+      // Retry logic: try up to 3 times
+      let lastError: unknown = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const response = await client.embeddings.create({
+            model: embeddingModel,
+            input: text,
+          });
 
-        const embedding = response.data[0]?.embedding;
-        if (!embedding) {
-          throw new Error('No embedding received from Azure OpenAI');
+          const embedding = response.data[0]?.embedding;
+          if (!embedding) {
+            throw new Error('No embedding received from Azure OpenAI');
+          }
+
+          const result: EmbeddingResponse = {
+            embedding,
+            usage: response.usage ? {
+              prompt_tokens: response.usage.prompt_tokens,
+              total_tokens: response.usage.total_tokens,
+            } : undefined,
+          };
+
+          if (cache && cacheKey) {
+            await cache.memoize(cacheKey, context, async () => result);
+          }
+
+          logger.debug(`Embedding successful (attempt ${attempt}/3), ${result.usage?.total_tokens ?? 0} tokens used`);
+          return result;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 3) {
+            logger.warn(`Embedding failed (attempt ${attempt}/3), retrying: ${error}`);
+          }
         }
-
-        const result: EmbeddingResponse = {
-          embedding,
-          usage: response.usage ? {
-            prompt_tokens: response.usage.prompt_tokens,
-            total_tokens: response.usage.total_tokens,
-          } : undefined,
-        };
-
-        if (cache && cacheKey) {
-          await cache.memoize(cacheKey, description, async () => result);
-        }
-
-        logger.debug(`Embedding successful, ${result.usage?.total_tokens ?? 0} tokens used`);
-        return result;
-      } catch (error) {
-        logger.error(`Azure OpenAI embedding failed: ${error}`);
-        throw error;
       }
+      
+      // All retries failed
+      logger.error(`AI embedding failed after 3 attempts for: ${context}`);
+      logger.error(`Last error: ${lastError}`);
+      logger.error(`Text length: ${text.length}`);
+      logger.error(`Model: ${embeddingModel}, Effort: ${effortLevel}`);
+      process.exit(1);
     },
   };
 }

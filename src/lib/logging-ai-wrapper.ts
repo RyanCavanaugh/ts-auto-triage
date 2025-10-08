@@ -16,36 +16,30 @@ export function createLoggingAIWrapper(
       messages: ChatMessage[],
       options: {
         jsonSchema: z.ZodSchema<T>;
+        context: string;
         maxTokens?: number;
-        temperature?: number;
-        model?: string;
-        context?: string;
         effort?: string;
       }
     ): Promise<T> => {
-      const context = options.context ?? 'Structured completion';
-      
       // Log input
-      await fileLogger.logLLMInput(context, messages);
+      await fileLogger.logLLMInput(options.context, messages);
       
       // Make the actual call - need to cast to work around type inference
-      const result = await ai.completion<T>(messages, options as any);
+      const result = await ai.completion<T>(messages, options as never);
       
       // Log output (structured result)
-      await fileLogger.logLLMOutput(context, result);
+      await fileLogger.logLLMOutput(options.context, result);
       
       return result;
     }) as AIWrapper['completion'],
 
-    getEmbedding: async (text: string, model?: string, context?: string) => {
-      const embeddingContext = context ?? 'Get embedding';
-      
+    getEmbedding: async (text: string, context: string) => {
       // Log input
-      await fileLogger.logInfo(`**Embedding Input (${embeddingContext}):**`);
+      await fileLogger.logInfo(`**Embedding Input (${context}):**`);
       await fileLogger.logData('Text', text.length > 500 ? text.slice(0, 500) + '... (truncated)' : text);
       
       // Make the actual call
-      const result = await ai.getEmbedding(text, model, context);
+      const result = await ai.getEmbedding(text, context);
       
       // Log output (just metadata, not the full embedding array)
       await fileLogger.logInfo(`**Embedding Output:** Generated ${result.embedding.length} dimensional embedding`);

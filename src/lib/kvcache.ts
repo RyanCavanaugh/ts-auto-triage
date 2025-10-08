@@ -17,7 +17,6 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
   return {
     async memoize<T>(key: string, description: string, compute: () => Promise<T>): Promise<T> {
       if (!enabled) {
-        logger.debug(`Cache disabled, computing fresh value for: ${description}`);
         return await compute();
       }
 
@@ -28,17 +27,13 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
         // Try to read from cache
         const cacheData = await fs.readFile(cachePath, 'utf-8');
         const entry: CacheEntry<T> = JSON.parse(cacheData);
-        logger.debug(`Cache hit: ${description}`);
         return entry.data;
       } catch (error) {
         // Cache miss, compute and store
-        logger.debug(`Cache miss: ${description}, computing...`);
         const result = await compute();
 
         // If the computed value is explicitly null, don't create a cache file.
         if (result === null) {
-          console.trace();
-          logger.debug(`Computed result is null for: ${description}; not creating cache file`);
           return result;
         }
         
@@ -49,7 +44,6 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
             timestamp: Date.now(),
           };
           await fs.writeFile(cachePath, JSON.stringify(entry, null, 2));
-          logger.debug(`Cached result: ${description}`);
         } catch (writeError) {
           logger.warn(`Failed to write cache for ${description}: ${writeError}`);
         }

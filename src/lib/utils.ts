@@ -257,7 +257,7 @@ export async function findSimilarIssuesUsingEmbeddings(
   issueTitle: string,
   issueBody: string,
   currentIssueRef: IssueRef,
-  ai: { getEmbedding: (text: string, model?: string, context?: string) => Promise<{ embedding: number[] }> },
+  ai: { getEmbedding: (text: string, context: string) => Promise<{ embedding: number[] }> },
   config: { ai: { maxEmbeddingInputLength: number } },
   maxResults = 5
 ): Promise<SimilarIssue[]> {
@@ -275,7 +275,7 @@ export async function findSimilarIssuesUsingEmbeddings(
       ? currentIssueText.slice(0, config.ai.maxEmbeddingInputLength - 3) + '...'
       : currentIssueText;
     const issueKey = `${currentIssueRef.owner}/${currentIssueRef.repo}#${currentIssueRef.number}`;
-    const currentEmbedding = await ai.getEmbedding(cappedText, undefined, `Get embedding for current issue ${issueKey}`);
+    const currentEmbedding = await ai.getEmbedding(cappedText, `Get embedding for current issue ${issueKey}`);
 
     // Calculate similarities by finding and reading all embedding files
     const similarities: Array<{ issueKey: string; similarity: number; summary: string }> = [];
