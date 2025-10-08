@@ -25,6 +25,7 @@ async function main() {
       console.error('Usage: first-response <issue-ref>');
       console.error('Example: first-response Microsoft/TypeScript#9998');
       console.error('Example: first-response #9998 (uses defaultRepo from config)');
+      console.error('Example: first-response 9998 (bare number also supported)');
       process.exit(1);
     }
 

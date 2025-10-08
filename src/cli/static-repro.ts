@@ -28,6 +28,7 @@ async function main() {
       console.error('Usage: static-repro <issue-ref> [--validate]');
       console.error('Example: static-repro Microsoft/TypeScript#9998');
       console.error('Example: static-repro #9998 (uses defaultRepo from config)');
+      console.error('Example: static-repro 9998 (bare number also supported)');
       console.error('Example: static-repro Microsoft/TypeScript#9998 --validate');
       console.error('');
       console.error('Options:');

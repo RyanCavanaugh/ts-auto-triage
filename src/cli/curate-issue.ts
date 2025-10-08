@@ -21,6 +21,7 @@ async function main() {
       console.error('Usage: curate-issue <issue-ref>');
       console.error('Example: curate-issue Microsoft/TypeScript#9998');
       console.error('Example: curate-issue #9998 (uses defaultRepo from config)');
+      console.error('Example: curate-issue 9998 (bare number also supported)');
       process.exit(1);
     }
 

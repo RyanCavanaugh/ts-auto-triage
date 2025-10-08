@@ -20,6 +20,7 @@ async function main() {
       console.error('Usage: fetch-issue <issue-ref>');
       console.error('Example: fetch-issue Microsoft/TypeScript#9998');
       console.error('Example: fetch-issue #9998 (uses defaultRepo from config)');
+      console.error('Example: fetch-issue 9998 (bare number also supported)');
       console.error('Example: fetch-issue https://github.com/Microsoft/TypeScript/issues/9998');
       process.exit(1);
     }

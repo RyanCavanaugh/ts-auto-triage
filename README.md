@@ -159,17 +159,23 @@ npx resummarize-suggestion Microsoft/TypeScript#202
 ```bash
 # Fetch and cache issue data
 npx fetch-issue Microsoft/TypeScript#50139
+npx fetch-issue #50139                      # Uses defaultRepo from config
 npx fetch-issues Microsoft/TypeScript
+npx fetch-issues                            # Uses repositories from config
 
 # AI-powered analysis
 npx summarize-issues Microsoft/TypeScript
+npx summarize-issues                        # Uses repositories from config
 npx curate-issue Microsoft/TypeScript#50139
+npx curate-issue #50139                     # Uses defaultRepo from config
 npx first-response Microsoft/TypeScript#50139
+npx first-response #50139                   # Uses defaultRepo from config
 npx repro-issue Microsoft/TypeScript#50139
 npx resummarize-suggestion Microsoft/TypeScript#202
 
 # Execute proposed actions
 npx exec-action Microsoft/TypeScript#50139
+npx exec-action #50139                      # Uses defaultRepo from config
 
 # Test TypeScript behavior
 npx twoslash example.md hover --cwd /path/to/project
@@ -189,8 +195,45 @@ Update `config.jsonc` with your Azure OpenAI endpoints:
         "embeddings": "text-embedding-3-large"
       }
     }
-  }
+  },
+  // Optional: List of repositories to process when no argument is provided
+  "repositories": [
+    "microsoft/TypeScript"
+  ],
+  // Optional: Default repository for bare issue numbers (e.g., #9998 -> microsoft/TypeScript#9998)
+  "defaultRepo": "microsoft/TypeScript"
 }
+```
+
+### Multi-Repository Support
+
+Commands that accept repository arguments can now process multiple repositories and fall back to the `repositories` list in the config:
+
+```bash
+# Use repositories from config.jsonc
+npx fetch-issues
+npx summarize-issues
+npx compute-embeddings
+npx make-news
+
+# Or specify multiple repositories explicitly
+npx fetch-issues Microsoft/TypeScript facebook/react
+npx summarize-issues Microsoft/TypeScript facebook/react
+```
+
+### Default Repository for Issue References
+
+When `defaultRepo` is set in the config, you can use bare issue numbers:
+
+```bash
+# With defaultRepo set to "microsoft/TypeScript"
+npx fetch-issue #9998                    # Resolves to microsoft/TypeScript#9998
+npx static-repro #50139                  # Resolves to microsoft/TypeScript#50139
+npx curate-issue 12345                   # Resolves to microsoft/TypeScript#12345
+
+# Full format still works
+npx fetch-issue microsoft/TypeScript#9998
+npx static-repro facebook/react#123
 ```
 
 ## Key Features

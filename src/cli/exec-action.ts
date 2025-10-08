@@ -19,6 +19,7 @@ async function main() {
       console.error('Usage: exec-action <issue-ref>');
       console.error('Example: exec-action Microsoft/TypeScript#9998');
       console.error('Example: exec-action #9998 (uses defaultRepo from config)');
+      console.error('Example: exec-action 9998 (bare number also supported)');
       process.exit(1);
     }
 
