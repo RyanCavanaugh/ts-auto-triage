@@ -174,18 +174,6 @@ async function buildIssueSummary(
   const actions: ActionItem[] = [];
   
   // Collect all events (issue creation + comments + timeline events)
-  interface Event {
-    date: Date;
-    type: 'created' | 'commented' | 'closed' | 'reopened' | 'labeled' | 'unlabeled' | 'milestoned' | 'demilestoned' | 'assigned' | 'unassigned';
-    actor: string;
-    body?: string;
-    author_association?: string;
-    comment_id?: number;
-    label_name?: string;
-    milestone_title?: string;
-    assignee_login?: string;
-  }
-  
   const allEvents: Event[] = [];
   
   // Add issue creation
@@ -305,7 +293,17 @@ async function buildIssueSummary(
 interface EventGroup {
   date: Date;
   actor: string;
-  events: Event[];
+  events: Array<{
+    date: Date;
+    type: 'created' | 'commented' | 'closed' | 'reopened' | 'labeled' | 'unlabeled' | 'milestoned' | 'demilestoned' | 'assigned' | 'unassigned';
+    actor: string;
+    body?: string;
+    author_association?: string;
+    comment_id?: number;
+    label_name?: string;
+    milestone_title?: string;
+    assignee_login?: string;
+  }>;
   isGroup: true;
 }
 
@@ -338,7 +336,6 @@ function coalesceMetadataEvents(events: Event[]): EventOrGroup[] {
   
   while (i < events.length) {
     const event = events[i];
-    
     if (!event) {
       i++;
       continue;
@@ -357,7 +354,6 @@ function coalesceMetadataEvents(events: Event[]): EventOrGroup[] {
     
     while (j < events.length) {
       const nextEvent = events[j];
-      
       if (!nextEvent) {
         break;
       }
