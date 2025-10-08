@@ -41,11 +41,23 @@ async function main() {
     const issueFetcher = createIssueFetcher(octokit, config, logger, authToken);
 
     // Fetch all issues for each repo
+    let failedRepos: string[] = [];
     for (const [owner, repo] of repos) {
       logger.info(`Fetching all issues for: ${owner}/${repo}`);
-      await issueFetcher.fetchAllIssues(owner, repo);
-      logger.info(`Completed fetching all issues for ${owner}/${repo}`);
+      try {
+        await issueFetcher.fetchAllIssues(owner, repo);
+        logger.info(`Completed fetching all issues for ${owner}/${repo}`);
+      } catch (error) {
+        logger.error(`Failed to fetch issues for ${owner}/${repo}: ${error}`);
+        failedRepos.push(`${owner}/${repo}`);
+      }
     }
+
+    if (failedRepos.length > 0) {
+      logger.warn(`Failed to process ${failedRepos.length} repository(ies): ${failedRepos.join(', ')}`);
+      process.exit(1);
+    }
+    logger.info(`All repositories processed successfully`);
 
   } catch (error) {
     logger.error(`Failed to fetch issues: ${error}`);

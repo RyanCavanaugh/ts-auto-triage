@@ -50,6 +50,7 @@ async function main() {
     }
 
     // Process each repository
+    let failedRepos: string[] = [];
     for (const [owner, repo] of repos) {
       logger.info(`Computing embeddings for: ${owner}/${repo}`);
 
@@ -58,6 +59,7 @@ async function main() {
 
       if (issueKeys.length === 0) {
         logger.warn(`No summaries found for repository ${owner}/${repo}. Run summarize-issues for this repository first.`);
+        failedRepos.push(`${owner}/${repo}`);
         continue;
       }
 
@@ -147,7 +149,10 @@ async function main() {
       logger.info(`Embedding computation for ${owner}/${repo} complete! Processed: ${processedCount}, Skipped: ${skippedCount}, Total: ${issueKeys.length}`);
     }
 
-    logger.info('All repositories processed successfully');
+    if (failedRepos.length > 0) {
+      logger.warn(`Failed to process ${failedRepos.length} repository(ies): ${failedRepos.join(', ')}`);
+    }
+    logger.info(`All repositories processed. Success: ${repos.length - failedRepos.length}/${repos.length}`);
 
   } catch (error) {
     logger.error(`Failed to compute embeddings: ${error}`);

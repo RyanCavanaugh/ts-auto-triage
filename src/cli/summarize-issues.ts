@@ -51,6 +51,7 @@ async function main() {
     logger.debug('Pre-loaded existing summaries data for fast lookups');
 
     // Process each repository
+    let failedRepos: string[] = [];
     for (const [owner, repo] of repos) {
       logger.info(`Summarizing issues for: ${owner}/${repo}`);
 
@@ -63,6 +64,7 @@ async function main() {
         issueFiles = files.filter(f => f.endsWith('.json') && !f.endsWith('.embeddings.json')).map(f => join(dataDir, f));
       } catch {
         logger.error(`No issue data found in ${dataDir}. Run fetch-issues first.`);
+        failedRepos.push(`${owner}/${repo}`);
         continue;
       }
 
@@ -116,7 +118,10 @@ async function main() {
     // Ensure all changes are saved
     await summariesUpdater.dispose();
 
-    logger.info('All repositories processed successfully');
+    if (failedRepos.length > 0) {
+      logger.warn(`Failed to process ${failedRepos.length} repository(ies): ${failedRepos.join(', ')}`);
+    }
+    logger.info(`All repositories processed. Success: ${repos.length - failedRepos.length}/${repos.length}`);
 
   } catch (error) {
     logger.error(`Failed to summarize issues: ${error}`);

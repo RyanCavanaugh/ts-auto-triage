@@ -46,6 +46,7 @@ async function main() {
     const newspaperGenerator = createNewspaperGenerator(ai, logger, config.github.bots);
 
     // Process each repository
+    let failedRepos: string[] = [];
     for (const [owner, repo] of repos) {
       logger.info(`Generating newspaper reports for: ${owner}/${repo}`);
 
@@ -82,6 +83,10 @@ async function main() {
           issueFiles = files.filter(f => f.endsWith('.json') && !f.endsWith('.embeddings.json')).map(f => join(dataDir, f));
         } catch {
           logger.warn(`No issue data found in ${dataDir}. Run fetch-issues first.`);
+          if (daysAgo === 1) {
+            // Only add to failed repos on first attempt
+            failedRepos.push(`${owner}/${repo}`);
+          }
           continue;
         }
         
@@ -123,7 +128,7 @@ async function main() {
       }
       
       // Write reports to files for this repo
-      const reportsDir = `.reports/${owner.toLowerCase()}-${repo.toLowerCase()}`;
+      const reportsDir = `.reports/${owner.toLowerCase()}/${repo.toLowerCase()}`;
       ensureDirectoryExists(join(reportsDir, 'dummy'));
       
       for (const { date, report } of reports) {
@@ -138,7 +143,10 @@ async function main() {
       logger.info(`Generated ${reports.length} newspaper reports for ${owner}/${repo}`);
     }
 
-    logger.info('All repositories processed successfully');
+    if (failedRepos.length > 0) {
+      logger.warn(`Failed to process ${failedRepos.length} repository(ies): ${failedRepos.join(', ')}`);
+    }
+    logger.info(`All repositories processed. Success: ${repos.length - failedRepos.length}/${repos.length}`);
 
   } catch (error) {
     logger.error(`Failed to generate newspaper reports: ${error}`);
