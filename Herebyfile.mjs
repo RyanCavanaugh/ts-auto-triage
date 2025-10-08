@@ -268,5 +268,15 @@ export const makeNews = task({
     },
 });
 
+export const publishNews = task({
+    name: "publish-news",
+    description: "Publish newspaper reports to GitHub gists",
+    dependencies: [build],
+    run: async () => {
+        const repoRefs = getRepoRefFromArgs('publish-news', true);
+        await execa("node", ["dist/cli/publish-news.js", ...repoRefs], { stdio: "inherit" });
+    },
+});
+
 // Default task - build
 export default build;
