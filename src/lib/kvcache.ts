@@ -30,16 +30,16 @@ export function createKVCache(logger: Logger, enabled: boolean = true): KVCache 
         logger.info(`[Cache hit] ${description}`);
         return entry.data;
       } catch (error) {
-        // Cache miss, compute and store
+        // Cache miss - compute the value
         const result = await compute();
 
-        // If the computed value is explicitly null, don't create a cache file.
-        // This is used for cache existence checks - we shouldn't log these as cache misses.
+        // Callers use `async () => null` to check if a cache entry exists without storing anything.
+        // When null is returned, don't create a cache file or log a cache miss.
         if (result === null) {
           return result;
         }
         
-        // Log cache miss only when we're actually computing and storing a new value
+        // Log cache miss when we're computing and storing a real (non-null) value
         logger.info(`[Cache miss] ${description}`);
         
         try {
