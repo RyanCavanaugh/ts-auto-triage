@@ -3,7 +3,7 @@
 import { readFile, readdir } from 'fs/promises';
 import { join, basename } from 'path';
 import * as jsonc from 'jsonc-parser';
-import { createConsoleLogger, zodToJsonSchema, createFileUpdater } from '../lib/utils.js';
+import { createConsoleLogger, zodToJsonSchema, createFileUpdater, parseRepoRef } from '../lib/utils.js';
 import { createAIWrapper, type AIWrapper } from '../lib/ai-wrapper.js';
 import { ConfigSchema, GitHubIssueSchema, type GitHubIssue, type Config, type IssueSummaries, IssueSummariesSchema } from '../lib/schemas.js';
 import { loadPrompt } from '../lib/prompts.js';
@@ -12,27 +12,30 @@ async function main() {
   const logger = createConsoleLogger();
   
   try {
-    // Parse command line arguments
-    const args = process.argv.slice(2);
-    if (args.length !== 1) {
-      console.error('Usage: summarize-issues <owner/repo>');
-      console.error('Example: summarize-issues Microsoft/TypeScript');
-      process.exit(1);
-    }
-
-    const repoInput = args[0]!;
-    const [owner, repo] = repoInput.split('/');
-    
-    if (!owner || !repo) {
-      console.error('Invalid repository format. Use: owner/repo');
-      process.exit(1);
-    }
-    
-    logger.info(`Summarizing issues for: ${owner}/${repo}`);
-
-    // Load configuration
+    // Load configuration first
     const configContent = await readFile('config.jsonc', 'utf-8');
     const config = ConfigSchema.parse(jsonc.parse(configContent));
+
+    // Parse command line arguments
+    const args = process.argv.slice(2);
+    let repos: Array<[owner: string, repo: string]> = [];
+
+    if (args.length === 0) {
+      // No arguments - use config repos
+      if (!config.github.repos || config.github.repos.length === 0) {
+        console.error('Usage: summarize-issues [<owner/repo>...]');
+        console.error('Example: summarize-issues Microsoft/TypeScript');
+        console.error('Example: summarize-issues Microsoft/TypeScript facebook/react');
+        console.error('');
+        console.error('Or configure default repositories in config.jsonc under github.repos');
+        process.exit(1);
+      }
+      repos = config.github.repos.map(r => parseRepoRef(r));
+      logger.info(`Using repos from config: ${config.github.repos.join(', ')}`);
+    } else {
+      // Use repos from arguments
+      repos = args.map(repoInput => parseRepoRef(repoInput));
+    }
 
     // Create AI wrapper
     const ai = createAIWrapper(config.azure.openai, logger, config.ai.cacheEnabled);
@@ -47,66 +50,73 @@ async function main() {
     await summariesUpdater.preload();
     logger.debug('Pre-loaded existing summaries data for fast lookups');
 
-    // Find all issue files for this repository
-    const dataDir = `.data/${owner.toLowerCase()}/${repo.toLowerCase()}`;
-    let issueFiles: string[] = [];
-    
-    try {
-      const files = await readdir(dataDir);
-      issueFiles = files.filter(f => f.endsWith('.json') && !f.endsWith('.embeddings.json')).map(f => join(dataDir, f));
-    } catch {
-      logger.error(`No issue data found in ${dataDir}. Run fetch-issues first.`);
-      process.exit(1);
-    }
+    // Process each repository
+    for (const [owner, repo] of repos) {
+      logger.info(`Summarizing issues for: ${owner}/${repo}`);
 
-    logger.info(`Found ${issueFiles.length} issue files to process`);
-
-    let processedCount = 0;
-    let skippedCount = 0;
-
-    for (const filePath of issueFiles) {
-      const issueNumber = basename(filePath, '.json');
-      const issueKey = `${owner.toLowerCase()}/${repo.toLowerCase()}#${issueNumber}`;
-
-      // Skip if already processed (summary must be present)
-      const existingSummaries = summariesUpdater.get(issueKey);
+      // Find all issue files for this repository
+      const dataDir = `.data/${owner.toLowerCase()}/${repo.toLowerCase()}`;
+      let issueFiles: string[] = [];
       
-      if (existingSummaries && Array.isArray(existingSummaries) && existingSummaries.length > 0) {
-        skippedCount++;
-        continue;
-      }
-
-      logger.info(`Processing ${issueKey}...`);
-
       try {
-        // Load issue data
-        const issueContent = await readFile(filePath, 'utf-8');
-        const issue = GitHubIssueSchema.parse(JSON.parse(issueContent));
-
-        // Create summaries (array) if not exists
-        if (!existingSummaries || existingSummaries.length === 0) {
-          const summaries = await createIssueSummaries(ai, issue, config, issueKey, 3);
-          summariesUpdater.set(issueKey, summaries);
-          logger.debug(`Created summaries for ${issueKey}`);
-        }
-
-        processedCount++;
-
-        // Log progress without forced flushes (auto-flush handles this)
-        if (processedCount % 10 === 0) {
-          logger.info(`Processed ${processedCount} issues (pending: summaries=${summariesUpdater.getPendingWrites()})`);
-        }
-
-      } catch (error) {
-        logger.error(`Failed to process ${issueKey}: ${error}`);
+        const files = await readdir(dataDir);
+        issueFiles = files.filter(f => f.endsWith('.json') && !f.endsWith('.embeddings.json')).map(f => join(dataDir, f));
+      } catch {
+        logger.error(`No issue data found in ${dataDir}. Run fetch-issues first.`);
         continue;
       }
+
+      logger.info(`Found ${issueFiles.length} issue files to process`);
+
+      let processedCount = 0;
+      let skippedCount = 0;
+
+      for (const filePath of issueFiles) {
+        const issueNumber = basename(filePath, '.json');
+        const issueKey = `${owner.toLowerCase()}/${repo.toLowerCase()}#${issueNumber}`;
+
+        // Skip if already processed (summary must be present)
+        const existingSummaries = summariesUpdater.get(issueKey);
+        
+        if (existingSummaries && Array.isArray(existingSummaries) && existingSummaries.length > 0) {
+          skippedCount++;
+          continue;
+        }
+
+        logger.info(`Processing ${issueKey}...`);
+
+        try {
+          // Load issue data
+          const issueContent = await readFile(filePath, 'utf-8');
+          const issue = GitHubIssueSchema.parse(JSON.parse(issueContent));
+
+          // Create summaries (array) if not exists
+          if (!existingSummaries || existingSummaries.length === 0) {
+            const summaries = await createIssueSummaries(ai, issue, config, issueKey, 3);
+            summariesUpdater.set(issueKey, summaries);
+            logger.debug(`Created summaries for ${issueKey}`);
+          }
+
+          processedCount++;
+
+          // Log progress without forced flushes (auto-flush handles this)
+          if (processedCount % 10 === 0) {
+            logger.info(`Processed ${processedCount} issues (pending: summaries=${summariesUpdater.getPendingWrites()})`);
+          }
+
+        } catch (error) {
+          logger.error(`Failed to process ${issueKey}: ${error}`);
+          continue;
+        }
+      }
+
+      logger.info(`Summarization for ${owner}/${repo} complete! Processed: ${processedCount}, Skipped: ${skippedCount}, Total: ${issueFiles.length}`);
     }
 
     // Ensure all changes are saved
     await summariesUpdater.dispose();
 
-    logger.info(`Summarization complete! Processed: ${processedCount}, Skipped: ${skippedCount}, Total: ${issueFiles.length}`);
+    logger.info('All repositories processed successfully');
 
   } catch (error) {
     logger.error(`Failed to summarize issues: ${error}`);

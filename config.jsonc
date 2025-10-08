@@ -34,7 +34,9 @@
     "rateLimitRetryDelay": 5000,
     "maxRetries": 3,
     "faqUrl": "https://github.com/microsoft/TypeScript/wiki/FAQ",
-    "bots": ["typescript-bot"]
+    "bots": ["typescript-bot"],
+    "defaultRepo": "microsoft/TypeScript",
+    "repos": ["microsoft/TypeScript"]
   },
   "ai": {
     "maxReproAttempts": 3,

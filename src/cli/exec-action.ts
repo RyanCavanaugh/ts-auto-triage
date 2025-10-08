@@ -9,22 +9,25 @@ async function main() {
   const logger = createConsoleLogger();
   
   try {
+    // Load configuration first to get defaultRepo
+    const configContent = await readFile('config.jsonc', 'utf-8');
+    const config = ConfigSchema.parse(jsonc.parse(configContent));
+
     // Parse command line arguments
     const args = process.argv.slice(2);
     if (args.length !== 1) {
       console.error('Usage: exec-action <issue-ref>');
       console.error('Example: exec-action Microsoft/TypeScript#9998');
+      if (config.github.defaultRepo) {
+        console.error(`Example: exec-action #9998 (uses default repo: ${config.github.defaultRepo})`);
+      }
       process.exit(1);
     }
 
     const issueRefInput = args[0]!;
-    const issueRef = parseIssueRef(issueRefInput);
+    const issueRef = parseIssueRef(issueRefInput, config.github.defaultRepo);
     
     logger.info(`Executing actions for issue: ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`);
-
-    // Load configuration
-    const configContent = await readFile('config.jsonc', 'utf-8');
-    const config = ConfigSchema.parse(jsonc.parse(configContent));
 
     // Read the action file
     const actionFilePath = createActionFilePath(issueRef);

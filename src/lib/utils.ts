@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import { execSync } from 'child_process';
 import type { IssueRef, Config, IssueAction } from './schemas.js';
 
-export function parseIssueRef(input: string): IssueRef {
+export function parseIssueRef(input: string, defaultRepo?: string): IssueRef {
   // Handle URL format: https://github.com/owner/repo/issues/123
   const urlMatch = input.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/);
   if (urlMatch) {
@@ -22,6 +22,20 @@ export function parseIssueRef(input: string): IssueRef {
       owner: shortMatch[1]!,
       repo: shortMatch[2]!,
       number: parseInt(shortMatch[3]!, 10),
+    };
+  }
+
+  // Handle bare issue number: #123 (requires defaultRepo)
+  const bareMatch = input.match(/^#(\d+)$/);
+  if (bareMatch) {
+    if (!defaultRepo) {
+      throw new Error(`Bare issue number ${input} requires a default repository to be configured`);
+    }
+    const [owner, repo] = parseRepoRef(defaultRepo);
+    return {
+      owner,
+      repo,
+      number: parseInt(bareMatch[1]!, 10),
     };
   }
 
@@ -404,4 +418,27 @@ export function formatActionsAsMarkdown(actions: IssueAction[]): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Parse a repository reference in the format "owner/repo"
+ */
+export function parseRepoRef(input: string): [owner: string, repo: string] {
+  const parts = input.split('/');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`Invalid repository format: ${input}. Expected format: owner/repo`);
+  }
+  return [parts[0], parts[1]];
+}
+
+/**
+ * Load config from config.jsonc file
+ */
+export async function loadConfig(): Promise<Config> {
+  const { readFile } = await import('fs/promises');
+  const { ConfigSchema } = await import('./schemas.js');
+  const jsonc = await import('jsonc-parser');
+  
+  const configContent = await readFile('config.jsonc', 'utf-8');
+  return ConfigSchema.parse(jsonc.parse(configContent));
 }

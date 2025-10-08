@@ -10,23 +10,26 @@ async function main() {
   const logger = createConsoleLogger();
   
   try {
+    // Load configuration first to get defaultRepo
+    const configContent = await readFile('config.jsonc', 'utf-8');
+    const config = ConfigSchema.parse(jsonc.parse(configContent));
+
     // Parse command line arguments
     const args = process.argv.slice(2);
     if (args.length !== 1) {
       console.error('Usage: fetch-issue <issue-ref>');
       console.error('Example: fetch-issue Microsoft/TypeScript#9998');
       console.error('Example: fetch-issue https://github.com/Microsoft/TypeScript/issues/9998');
+      if (config.github.defaultRepo) {
+        console.error(`Example: fetch-issue #9998 (uses default repo: ${config.github.defaultRepo})`);
+      }
       process.exit(1);
     }
 
     const issueRefInput = args[0]!;
-    const issueRef = parseIssueRef(issueRefInput);
+    const issueRef = parseIssueRef(issueRefInput, config.github.defaultRepo);
     
     logger.info(`Fetching issue: ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`);
-
-    // Load configuration
-    const configContent = await readFile('config.jsonc', 'utf-8');
-    const config = ConfigSchema.parse(jsonc.parse(configContent));
 
     // Create authenticated Octokit client and issue fetcher
     const authToken = getGitHubAuthToken();

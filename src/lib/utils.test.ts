@@ -1,4 +1,4 @@
-import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, formatActionsAsMarkdown } from './utils.js';
+import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, formatActionsAsMarkdown, parseRepoRef } from './utils.js';
 import type { IssueAction } from './schemas.js';
 
 describe('Utils', () => {
@@ -21,8 +21,42 @@ describe('Utils', () => {
       });
     });
 
+    it('should parse bare issue number with defaultRepo', () => {
+      const result = parseIssueRef('#1234', 'Microsoft/TypeScript');
+      expect(result).toEqual({
+        owner: 'Microsoft',
+        repo: 'TypeScript',
+        number: 1234,
+      });
+    });
+
+    it('should throw error for bare issue number without defaultRepo', () => {
+      expect(() => parseIssueRef('#1234')).toThrow('requires a default repository');
+    });
+
     it('should throw error for invalid format', () => {
       expect(() => parseIssueRef('invalid-format')).toThrow('Invalid issue reference format');
+    });
+  });
+
+  describe('parseRepoRef', () => {
+    it('should parse valid repo reference', () => {
+      const [owner, repo] = parseRepoRef('Microsoft/TypeScript');
+      expect(owner).toBe('Microsoft');
+      expect(repo).toBe('TypeScript');
+    });
+
+    it('should throw error for invalid format without slash', () => {
+      expect(() => parseRepoRef('MicrosoftTypeScript')).toThrow('Invalid repository format');
+    });
+
+    it('should throw error for invalid format with too many parts', () => {
+      expect(() => parseRepoRef('Microsoft/TypeScript/extra')).toThrow('Invalid repository format');
+    });
+
+    it('should throw error for empty parts', () => {
+      expect(() => parseRepoRef('/TypeScript')).toThrow('Invalid repository format');
+      expect(() => parseRepoRef('Microsoft/')).toThrow('Invalid repository format');
     });
   });
 
