@@ -19,148 +19,7 @@ describe('FAQ Matcher', () => {
     number: 123,
   };
 
-  describe('checkFAQMatch (legacy)', () => {
-    test('should return null when FAQ file does not exist', async () => {
-      const mockAI: AIWrapper = {} as AIWrapper;
-      const faqMatcher = createFAQMatcher(mockAI, mockLogger, '/nonexistent/FAQ.md');
-
-      const result = await faqMatcher.checkFAQMatch(
-        'Test Issue',
-        'Test issue body',
-        mockIssueRef
-      );
-
-      expect(result).toBeNull();
-      expect(mockLogger.debug).toHaveBeenCalled();
-    });
-
-    test('should return response when FAQ match is found', async () => {
-      // Create a temporary FAQ file
-      const tmpDir = '/tmp/faq-test';
-      const faqPath = `${tmpDir}/FAQ.md`;
-      await mkdir(tmpDir, { recursive: true });
-      await writeFile(faqPath, '# FAQ\n\n## Question 1\nAnswer 1');
-
-      const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockResolvedValue({
-          has_match: true,
-          response: 'This is addressed in FAQ section 1',
-        }),
-      } as unknown as AIWrapper;
-
-      const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
-
-      const result = await faqMatcher.checkFAQMatch(
-        'Test Issue',
-        'Test issue body',
-        mockIssueRef
-      );
-
-      expect(result).toBe('This is addressed in FAQ section 1');
-      expect(mockAI.structuredCompletion).toHaveBeenCalled();
-
-      // Cleanup
-      await rm(tmpDir, { recursive: true, force: true });
-    });
-
-    test('should return null when FAQ match is not found', async () => {
-      // Create a temporary FAQ file
-      const tmpDir = '/tmp/faq-test-2';
-      const faqPath = `${tmpDir}/FAQ.md`;
-      await mkdir(tmpDir, { recursive: true });
-      await writeFile(faqPath, '# FAQ\n\n## Question 1\nAnswer 1');
-
-      const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockResolvedValue({
-          has_match: false,
-          response: null,
-        }),
-      } as unknown as AIWrapper;
-
-      const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
-
-      const result = await faqMatcher.checkFAQMatch(
-        'Test Issue',
-        'Test issue body',
-        mockIssueRef
-      );
-
-      expect(result).toBeNull();
-      expect(mockAI.structuredCompletion).toHaveBeenCalled();
-
-      // Cleanup
-      await rm(tmpDir, { recursive: true, force: true });
-    });
-
-    test('should handle null response correctly when has_match is false', async () => {
-      const tmpDir = '/tmp/faq-test-null';
-      const faqPath = `${tmpDir}/FAQ.md`;
-      await mkdir(tmpDir, { recursive: true });
-      await writeFile(faqPath, '# FAQ\n\n## Question 1\nAnswer 1');
-
-      const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockResolvedValue({
-          has_match: false,
-          response: null, // Explicitly null as OpenAI API returns
-        }),
-      } as unknown as AIWrapper;
-
-      const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
-
-      const result = await faqMatcher.checkFAQMatch(
-        'Test Issue',
-        'Test issue body',
-        mockIssueRef
-      );
-
-      expect(result).toBeNull();
-      expect(mockAI.structuredCompletion).toHaveBeenCalled();
-
-      // Cleanup
-      await rm(tmpDir, { recursive: true, force: true });
-    });
-
-    test('should truncate issue body to 4000 characters', async () => {
-      const tmpDir = '/tmp/faq-test-3';
-      const faqPath = `${tmpDir}/FAQ.md`;
-      await mkdir(tmpDir, { recursive: true });
-      await writeFile(faqPath, '# FAQ\n\n## Question 1\nAnswer 1');
-
-      let capturedBody = '';
-      const mockAI: AIWrapper = {
-        structuredCompletion: jest.fn().mockImplementation(async (messages) => {
-          // Capture the user prompt to verify body truncation
-          const userMessage = messages.find((m: { role: string }) => m.role === 'user');
-          if (userMessage) {
-            capturedBody = userMessage.content;
-          }
-          return {
-            has_match: false,
-            response: null,
-          };
-        }),
-      } as unknown as AIWrapper;
-
-      const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
-
-      // Create a body longer than 4000 characters
-      const longBody = 'x'.repeat(5000);
-      await faqMatcher.checkFAQMatch(
-        'Test Issue',
-        longBody,
-        mockIssueRef
-      );
-
-      // The captured prompt should not contain the full 5000 character body
-      expect(capturedBody.length).toBeLessThan(5000);
-      expect(mockAI.structuredCompletion).toHaveBeenCalled();
-
-      // Cleanup
-      await rm(tmpDir, { recursive: true, force: true });
-    });
-  });
-
-  describe('checkAllFAQMatches (new)', () => {
+  describe('checkAllFAQMatches', () => {
     test('should return empty array when FAQ file does not exist', async () => {
       const mockAI: AIWrapper = {} as AIWrapper;
       const faqMatcher = createFAQMatcher(mockAI, mockLogger, '/nonexistent/FAQ.md');
@@ -195,7 +54,8 @@ Answer 3
       const mockAI: AIWrapper = {
         structuredCompletion: jest.fn().mockImplementation(async () => {
           callCount++;
-          return { result: { match: 'no' } };
+          // All entries return no match (stage 1 check only)
+          return { result: { match: 'no', reasoning: 'Not a match' } };
         }),
       } as unknown as AIWrapper;
 
@@ -207,7 +67,7 @@ Answer 3
         mockIssueRef
       );
 
-      // Should be called once for each FAQ entry (3 entries)
+      // Should be called once for each FAQ entry (3 entries, stage 1 check only)
       expect(callCount).toBe(3);
 
       // Cleanup
@@ -233,10 +93,20 @@ Answer 3
       let callIndex = 0;
       const mockAI: AIWrapper = {
         structuredCompletion: jest.fn().mockImplementation(async () => {
+          // Two-stage responses: check then writeup for each matched entry
           const responses = [
-            { result: { match: 'yes' as const, confidence: 3, writeup: 'Low confidence response' } },
-            { result: { match: 'yes' as const, confidence: 9, writeup: 'High confidence response' } },
-            { result: { match: 'yes' as const, confidence: 6, writeup: 'Medium confidence response' } },
+            // Entry 1: Low confidence - check
+            { result: { match: 'yes' as const, confidence: 3, reasoning: 'Match' } },
+            // Entry 1: Low confidence - writeup
+            { writeup: 'Low confidence response' },
+            // Entry 2: High confidence - check
+            { result: { match: 'yes' as const, confidence: 9, reasoning: 'Match' } },
+            // Entry 2: High confidence - writeup
+            { writeup: 'High confidence response' },
+            // Entry 3: Medium confidence - check
+            { result: { match: 'yes' as const, confidence: 6, reasoning: 'Match' } },
+            // Entry 3: Medium confidence - writeup
+            { writeup: 'Medium confidence response' },
           ];
           return responses[callIndex++];
         }),
@@ -281,9 +151,16 @@ This also matches
       const mockAI: AIWrapper = {
         structuredCompletion: jest.fn().mockImplementation(async () => {
           const responses = [
-            { result: { match: 'yes' as const, confidence: 7, writeup: 'First match' } },
-            { result: { match: 'no' as const } },
-            { result: { match: 'yes' as const, confidence: 8, writeup: 'Second match' } },
+            // Entry 1: Match - check
+            { result: { match: 'yes' as const, confidence: 7, reasoning: 'Match' } },
+            // Entry 1: Match - writeup
+            { writeup: 'First match' },
+            // Entry 2: No match - check only
+            { result: { match: 'no' as const, reasoning: 'Not a match' } },
+            // Entry 3: Match - check
+            { result: { match: 'yes' as const, confidence: 8, reasoning: 'Match' } },
+            // Entry 3: Match - writeup
+            { writeup: 'Second match' },
           ];
           return responses[callIndex++];
         }),
@@ -322,7 +199,7 @@ Test answer
           if (userMessage) {
             capturedBody = userMessage.content;
           }
-          return { result: { match: 'no' } };
+          return { result: { match: 'no', reasoning: 'Not a match' } };
         }),
       } as unknown as AIWrapper;
 
@@ -337,6 +214,59 @@ Test answer
 
       // Verify body was truncated in the prompt
       expect(capturedBody.length).toBeLessThan(5000);
+
+      // Cleanup
+      await rm(tmpDir, { recursive: true, force: true });
+    });
+
+    test('should use two-stage approach: check first, then writeup only if match', async () => {
+      const tmpDir = '/tmp/faq-test-two-stage';
+      const faqPath = `${tmpDir}/FAQ.md`;
+      await mkdir(tmpDir, { recursive: true });
+      await writeFile(faqPath, `# FAQ
+
+### Match Entry
+This matches
+
+### No Match Entry
+This does not match
+`);
+
+      const callLog: string[] = [];
+      let callCount = 0;
+      const mockAI: AIWrapper = {
+        structuredCompletion: jest.fn().mockImplementation(async (messages, schema) => {
+          // Track calls by counting - check stage returns discriminated union, writeup returns simple object
+          callCount++;
+          // Pattern: check, writeup, check (for 2 FAQ entries where 1st matches, 2nd doesn't)
+          if (callCount === 1) {
+            // First check - matches
+            callLog.push('check');
+            return { result: { match: 'yes' as const, confidence: 7, reasoning: 'Match' } };
+          } else if (callCount === 2) {
+            // First writeup
+            callLog.push('writeup');
+            return { writeup: 'Generated response' };
+          } else if (callCount === 3) {
+            // Second check - no match
+            callLog.push('check');
+            return { result: { match: 'no' as const, reasoning: 'Not a match' } };
+          }
+          throw new Error('Unexpected call count');
+        }),
+      } as unknown as AIWrapper;
+
+      const faqMatcher = createFAQMatcher(mockAI, mockLogger, faqPath);
+
+      const matches = await faqMatcher.checkAllFAQMatches(
+        'Test Issue',
+        'Test issue body',
+        mockIssueRef
+      );
+
+      // Should have: check, writeup, check
+      expect(callLog).toEqual(['check', 'writeup', 'check']);
+      expect(matches).toHaveLength(1);
 
       // Cleanup
       await rm(tmpDir, { recursive: true, force: true });
