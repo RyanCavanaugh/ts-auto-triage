@@ -7,8 +7,8 @@ import type { Logger } from './utils.js';
 import { ensureDirectoryExists, createIssueDataPath } from './utils.js';
 
 export interface IssueFetcher {
-  fetchIssue(ref: IssueRef): Promise<GitHubIssue>;
-  fetchAllIssues(owner: string, repo: string): Promise<void>;
+  fetchIssue(ref: IssueRef, force?: boolean): Promise<GitHubIssue>;
+  fetchAllIssues(owner: string, repo: string, options?: { force?: boolean; includePullRequests?: boolean }): Promise<void>;
   getLocalIssue(ref: IssueRef): Promise<GitHubIssue | null>;
   hasLocalIssue(ref: IssueRef): Promise<boolean>;
 }
@@ -78,10 +78,28 @@ export function createIssueFetcher(
   });
 
   return {
-    async fetchIssue(ref: IssueRef): Promise<GitHubIssue> {
-      logger.info(`Fetching issue ${ref.owner}/${ref.repo}#${ref.number}`);
+    async fetchIssue(ref: IssueRef, force: boolean = false): Promise<GitHubIssue> {
+      logger.info(`Fetching issue ${ref.owner}/${ref.repo}#${ref.number}${force ? ' (forced)' : ''}`);
       
       try {
+        // Check if already up to date (unless forced)
+        if (!force) {
+          const localIssue = await this.getLocalIssue(ref);
+          if (localIssue) {
+            // Quick check with minimal API call
+            const issueBasic = await octokit.rest.issues.get({
+              owner: ref.owner,
+              repo: ref.repo,
+              issue_number: ref.number,
+            });
+            
+            if (new Date(localIssue.updated_at) >= new Date(issueBasic.data.updated_at)) {
+              logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
+              return localIssue;
+            }
+          }
+        }
+        
         // Fetch the issue
         const issueResponse = await octokit.rest.issues.get({
           owner: ref.owner,
@@ -111,6 +129,32 @@ export function createIssueFetcher(
           
           if (nextPage.data.length === 0) break;
           allComments = allComments.concat(nextPage.data);
+        }
+
+        // Fetch timeline events (labels, milestones, state changes, etc.)
+        const timelineResponse = await octokit.rest.issues.listEventsForTimeline({
+          owner: ref.owner,
+          repo: ref.repo,
+          issue_number: ref.number,
+          per_page: 100,
+        });
+
+        let allTimelineEvents = timelineResponse.data;
+        
+        // Handle pagination for timeline events
+        let page = 2;
+        while (timelineResponse.data.length === 100) {
+          const nextPage = await octokit.rest.issues.listEventsForTimeline({
+            owner: ref.owner,
+            repo: ref.repo,
+            issue_number: ref.number,
+            per_page: 100,
+            page,
+          });
+          
+          if (nextPage.data.length === 0) break;
+          allTimelineEvents = allTimelineEvents.concat(nextPage.data);
+          page++;
         }
 
         // Transform to our schema format
@@ -177,6 +221,93 @@ export function createIssueFetcher(
             id: assignee?.id ?? 0,
             type: assignee?.type as 'User' | 'Bot' | 'Organization' ?? 'User',
           })) ?? [],
+          timeline_events: allTimelineEvents.map(event => {
+            // Safely extract properties based on what's available
+            const timelineEvent: Record<string, unknown> = {
+              event: 'event' in event ? event.event : 'unknown',
+              created_at: 'created_at' in event ? event.created_at : new Date().toISOString(),
+            };
+            
+            // Add optional id if present
+            if ('id' in event && typeof event.id === 'number') {
+              timelineEvent.id = event.id;
+            }
+            
+            // Add actor if present
+            if ('actor' in event && event.actor && typeof event.actor === 'object') {
+              const actor = event.actor as { login: string; id: number; type?: string };
+              timelineEvent.actor = {
+                login: actor.login,
+                id: actor.id,
+                type: actor.type ?? 'User',
+              };
+            }
+            
+            // Add optional fields
+            if ('author_association' in event) {
+              timelineEvent.author_association = event.author_association as string;
+            }
+            
+            if ('body' in event) {
+              timelineEvent.body = event.body as string;
+            }
+            
+            if ('label' in event && event.label && typeof event.label === 'object') {
+              const label = event.label as { name: string; color: string };
+              timelineEvent.label = {
+                name: label.name,
+                color: label.color,
+              };
+            }
+            
+            if ('assignee' in event && event.assignee && typeof event.assignee === 'object') {
+              const assignee = event.assignee as { login: string; id: number; type?: string };
+              timelineEvent.assignee = {
+                login: assignee.login,
+                id: assignee.id,
+                type: assignee.type ?? 'User',
+              };
+            }
+            
+            if ('assigner' in event && event.assigner && typeof event.assigner === 'object') {
+              const assigner = event.assigner as { login: string; id: number; type?: string };
+              timelineEvent.assigner = {
+                login: assigner.login,
+                id: assigner.id,
+                type: assigner.type ?? 'User',
+              };
+            }
+            
+            if ('milestone' in event && event.milestone && typeof event.milestone === 'object') {
+              const milestone = event.milestone as { title: string };
+              timelineEvent.milestone = {
+                title: milestone.title,
+              };
+            }
+            
+            if ('rename' in event && event.rename && typeof event.rename === 'object') {
+              const rename = event.rename as { from: string; to: string };
+              timelineEvent.rename = {
+                from: rename.from,
+                to: rename.to,
+              };
+            }
+            
+            if ('html_url' in event) {
+              timelineEvent.html_url = event.html_url as string;
+            }
+            
+            if ('user' in event && event.user && typeof event.user === 'object') {
+              const user = event.user as { login: string; id: number; type?: string };
+              timelineEvent.user = {
+                login: user.login,
+                id: user.id,
+                type: user.type ?? 'User',
+              };
+            }
+            
+            return timelineEvent;
+          }),
         };
 
         const validatedIssue = GitHubIssueSchema.parse(issue);
@@ -193,14 +324,15 @@ export function createIssueFetcher(
         if (error instanceof Error && 'status' in error && error.status === 403) {
           logger.warn(`Rate limited while fetching ${ref.owner}/${ref.repo}#${ref.number}, waiting...`);
           await sleep(config.github.rateLimitRetryDelay);
-          return await this.fetchIssue(ref);
+          return await this.fetchIssue(ref, force);
         }
         throw new Error(`Failed to fetch issue ${ref.owner}/${ref.repo}#${ref.number}: ${error}`);
       }
     },
 
-    async fetchAllIssues(owner: string, repo: string): Promise<void> {
-      logger.info(`Starting bulk fetch for ${owner}/${repo} using cursor-based pagination`);
+    async fetchAllIssues(owner: string, repo: string, options: { force?: boolean; includePullRequests?: boolean } = {}): Promise<void> {
+      const { force = false, includePullRequests = true } = options;
+      logger.info(`Starting bulk fetch for ${owner}/${repo} using cursor-based pagination${force ? ' (forced)' : ''}${includePullRequests ? ' (including PRs)' : ' (issues only)'}`);
       
       let cursor: string | null = null;
       let hasNextPage = true;
@@ -286,24 +418,40 @@ export function createIssueFetcher(
           for (const issue of issues.nodes) {
             const ref: IssueRef = { owner, repo, number: issue.number };
             
-            // Check if we already have this issue and it's up to date
-            const localIssue = await this.getLocalIssue(ref);
-            if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updatedAt)) {
-              logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
-              cachedIssuesInPage++;
-              continue;
+            // Skip pull requests if not included
+            if (!includePullRequests) {
+              // Check if it's a pull request by looking at the URL or fetching minimal data
+              const issueCheck = await octokit.rest.issues.get({
+                owner: ref.owner,
+                repo: ref.repo,
+                issue_number: ref.number,
+              });
+              if ('pull_request' in issueCheck.data) {
+                logger.debug(`Skipping PR ${ref.owner}/${ref.repo}#${ref.number}`);
+                continue;
+              }
             }
             
-            // Fetch the full issue data using REST API (which includes comments)
-            await this.fetchIssue(ref);
+            // Check if we already have this issue and it's up to date (unless forced)
+            if (!force) {
+              const localIssue = await this.getLocalIssue(ref);
+              if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updatedAt)) {
+                logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
+                cachedIssuesInPage++;
+                continue;
+              }
+            }
+            
+            // Fetch the full issue data using REST API (which includes comments and timeline)
+            await this.fetchIssue(ref, force);
             totalFetched++;
             
             // Small delay to avoid overwhelming the API
             await sleep(100);
           }
           
-          // If entire page was already cached, stop processing
-          if (cachedIssuesInPage === pageSize && pageSize > 0) {
+          // If entire page was already cached and not forced, stop processing
+          if (!force && cachedIssuesInPage === pageSize && pageSize > 0) {
             logger.info(`Entire page ${pageCount} (${pageSize} issues) was already up-to-date. Stopping early to avoid unnecessary API calls.`);
             hasNextPage = false;
             break;
