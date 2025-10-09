@@ -5,13 +5,13 @@ import { execSync } from 'child_process';
 import type { IssueRef, Config, IssueAction } from './schemas.js';
 
 export function parseIssueRef(input: string, defaultRepo?: string): IssueRef {
-  // Handle URL format: https://github.com/owner/repo/issues/123
-  const urlMatch = input.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/);
+  // Handle URL format: https://github.com/owner/repo/issues/123 or /pull/123
+  const urlMatch = input.match(/github\.com\/([^\/]+)\/([^\/]+)\/(issues|pull)\/(\d+)/);
   if (urlMatch) {
     return {
       owner: urlMatch[1]!,
       repo: urlMatch[2]!,
-      number: parseInt(urlMatch[3]!, 10),
+      number: parseInt(urlMatch[4]!, 10),
     };
   }
 
