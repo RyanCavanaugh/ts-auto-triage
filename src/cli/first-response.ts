@@ -102,15 +102,9 @@ async function main() {
 
     const [faqResult, duplicateResult] = await Promise.allSettled([
       // FAQ matching
-      (async () => {
-        await fileLogger.logInfo('Checking for FAQ matches...');
-        return await faqMatcher.checkAllFAQMatches(issue.title, issueBody, issueRef);
-      })(),
+      faqMatcher.checkAllFAQMatches(issue.title, issueBody, issueRef),
       // Duplicate detection
-      (async () => {
-        await fileLogger.logInfo('Searching for similar issues...');
-        return await findDuplicates(ai, issueBody, issue.title, issueRef, config, fileLogger);
-      })()
+      findDuplicates(ai, issueBody, issue.title, issueRef, config, fileLogger)
     ]);
 
     // Process FAQ results
