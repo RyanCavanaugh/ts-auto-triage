@@ -1,8 +1,8 @@
 import type { IssueRef, GitHubIssue, TimelineEvent, CommentSummary } from './schemas.js';
 import { CommentSummarySchema } from './schemas.js';
 import type { AIWrapper } from './ai-wrapper.js';
-import type { Logger, escapeMarkdown } from './utils.js';
-import { escapeMarkdown as escapeMarkdownImpl } from './utils.js';
+import type { Logger } from './utils.js';
+import { escapeMarkdown } from './utils.js';
 import { loadPrompt } from './prompts.js';
 import removeMd from 'remove-markdown';
 import { z } from 'zod';
@@ -195,7 +195,7 @@ async function buildIssueSummary(
   markdown += `\n\n`;
   
   // Escape markdown in the title for display
-  const escapedTitle = escapeMarkdownImpl(issue.title);
+  const escapedTitle = escapeMarkdown(issue.title);
   markdown += `**${escapedTitle}**\n\n`;
   markdown += `*${oneSentenceSummary}*\n\n`;
   
