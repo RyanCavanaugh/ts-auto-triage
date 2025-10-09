@@ -17,6 +17,18 @@ interface PublishedReport {
   filename: string;
 }
 
+interface IndexEntry {
+  date: string; // YYYY-MM-DD format
+  gistUrl: string;
+}
+
+/**
+ * Validate that a string is in YYYY-MM-DD format.
+ */
+function isValidDateFormat(dateStr: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+}
+
 /**
  * Sanitize a filename for use in a gist URL anchor.
  * GitHub replaces special characters with hyphens in file anchors.
@@ -41,7 +53,8 @@ function parseNewsIndex(content: string | undefined): Map<string, string> {
   while ((match = linkRegex.exec(content)) !== null) {
     const date = match[1];
     const url = match[2];
-    if (date && url) {
+    // Validate date format and presence of both values
+    if (date && url && isValidDateFormat(date)) {
       links.set(date, url);
     }
   }
@@ -53,7 +66,7 @@ function parseNewsIndex(content: string | undefined): Map<string, string> {
  * Build the content for news-index.md from a list of reports.
  * Reports should be sorted by date descending (newest first).
  */
-function buildNewsIndexContent(owner: string, repo: string, reports: PublishedReport[]): string {
+function buildNewsIndexContent(owner: string, repo: string, reports: IndexEntry[]): string {
   const header = `# News Reports for ${owner}/${repo}\n\n`;
   const links = reports.map(r => `- [${r.date}](${r.gistUrl})`).join('\n');
   return header + links + '\n';
@@ -211,12 +224,18 @@ async function main() {
       // First, parse existing index if it exists
       if (existingIndexGist && existingIndexGist.files) {
         const existingFile = existingIndexGist.files[indexFilename];
-        // The content property may not be typed, but it exists at runtime when fetching gists
-        const fileContent = existingFile ? (existingFile as { content?: string }).content : undefined;
-        if (fileContent) {
-          const existingLinks = parseNewsIndex(fileContent);
-          existingLinks.forEach((url, date) => allReports.set(date, url));
-          logger.info(`Found ${existingLinks.size} existing report(s) in index`);
+        if (existingFile) {
+          // GitHub API returns content property when listing gists, but it's not in all type definitions
+          // We use a type guard to safely access it
+          const hasContent = (file: unknown): file is { content: string } => {
+            return typeof file === 'object' && file !== null && 'content' in file && typeof (file as { content?: unknown }).content === 'string';
+          };
+          
+          if (hasContent(existingFile)) {
+            const existingLinks = parseNewsIndex(existingFile.content);
+            existingLinks.forEach((url, date) => allReports.set(date, url));
+            logger.info(`Found ${existingLinks.size} existing report(s) in index`);
+          }
         }
       }
 
@@ -226,9 +245,9 @@ async function main() {
       }
 
       // Sort by date descending (newest first)
-      const sortedReports: PublishedReport[] = Array.from(allReports.entries())
+      const sortedReports: IndexEntry[] = Array.from(allReports.entries())
         .sort((a, b) => b[0].localeCompare(a[0])) // Sort dates descending
-        .map(([date, gistUrl]) => ({ date, gistUrl, filename: '' }));
+        .map(([date, gistUrl]) => ({ date, gistUrl }));
 
       const indexContent = buildNewsIndexContent(owner, repo, sortedReports);
 
