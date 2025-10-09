@@ -99,6 +99,8 @@ async function main() {
     // Run FAQ matching and duplicate detection concurrently
     await fileLogger.logSection('FAQ Matching and Duplicate Detection');
     await fileLogger.logInfo('Starting concurrent FAQ matching and duplicate detection...');
+    await fileLogger.logInfo('- Checking for FAQ matches');
+    await fileLogger.logInfo('- Searching for similar issues');
 
     const [faqResult, duplicateResult] = await Promise.allSettled([
       // FAQ matching
