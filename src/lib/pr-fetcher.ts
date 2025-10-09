@@ -107,7 +107,8 @@ export function createPRFetcher(
       
       // Handle pagination for comments
       let nextCommentsPage = 2;
-      while (allComments.length % 100 === 0 && allComments.length > 0) {
+      let lastResponseLength = commentsResponse.data.length;
+      while (lastResponseLength === 100) {
         const nextPage = await octokit.rest.issues.listComments({
           owner: ref.owner,
           repo: ref.repo,
@@ -116,7 +117,8 @@ export function createPRFetcher(
           page: nextCommentsPage++,
         });
         
-        if (nextPage.data.length === 0) break;
+        lastResponseLength = nextPage.data.length;
+        if (lastResponseLength === 0) break;
         allComments = allComments.concat(nextPage.data);
       }
 
@@ -132,7 +134,8 @@ export function createPRFetcher(
       
       // Handle pagination for timeline events
       let timelinePage = 2;
-      while (allTimelineEvents.length % 100 === 0 && allTimelineEvents.length > 0) {
+      let lastTimelineLength = timelineResponse.data.length;
+      while (lastTimelineLength === 100) {
         const nextPage = await octokit.rest.issues.listEventsForTimeline({
           owner: ref.owner,
           repo: ref.repo,
@@ -141,7 +144,8 @@ export function createPRFetcher(
           page: timelinePage++,
         });
         
-        if (nextPage.data.length === 0) break;
+        lastTimelineLength = nextPage.data.length;
+        if (lastTimelineLength === 0) break;
         allTimelineEvents = allTimelineEvents.concat(nextPage.data);
       }
 
