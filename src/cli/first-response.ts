@@ -96,12 +96,18 @@ async function main() {
     // Create FAQ matcher
     const faqMatcher = createFAQMatcher(ai, logger, 'FAQ.md', config.github.faqUrl);
 
-    // Check FAQ entries using new per-entry matching
+    // Run FAQ matching and duplicate detection concurrently
+    logger.info('Starting FAQ matching and duplicate detection concurrently...');
+    const [faqResult, duplicateResult] = await Promise.allSettled([
+      faqMatcher.checkAllFAQMatches(issue.title, issueBody, issueRef),
+      findDuplicates(ai, issueBody, issue.title, issueRef, config),
+    ]);
+
+    // Log FAQ matching results
     await fileLogger.logSection('FAQ Matching');
     let faqMatches: Awaited<ReturnType<typeof faqMatcher.checkAllFAQMatches>> = [];
-    try {
-      await fileLogger.logInfo('Checking for FAQ matches...');
-      faqMatches = await faqMatcher.checkAllFAQMatches(issue.title, issueBody, issueRef);
+    if (faqResult.status === 'fulfilled') {
+      faqMatches = faqResult.value;
       if (faqMatches.length > 0) {
         await fileLogger.logDecision(`Found ${faqMatches.length} FAQ match(es)`);
         await fileLogger.logData('FAQ Matches', faqMatches.map(m => ({
@@ -113,25 +119,27 @@ async function main() {
       } else {
         await fileLogger.logDecision('No FAQ matches found');
       }
-    } catch (error) {
-      await fileLogger.logInfo(`FAQ check failed: ${error}`);
-      logger.debug(`FAQ check failed: ${error}`);
+    } else {
+      await fileLogger.logInfo(`FAQ check failed: ${faqResult.reason}`);
+      logger.debug(`FAQ check failed: ${faqResult.reason}`);
     }
 
-    // Check for duplicates and similar issues
+    // Log duplicate detection results
     await fileLogger.logSection('Duplicate Detection');
     let similarIssues: string[] = [];
-    try {
-      await fileLogger.logInfo('Searching for similar issues...');
-      similarIssues = await findDuplicates(ai, issueBody, issue.title, issueRef, config, fileLogger);
+    if (duplicateResult.status === 'fulfilled') {
+      const duplicateData = duplicateResult.value;
+      similarIssues = duplicateData.results;
+      await fileLogger.logInfo(`Found ${duplicateData.embeddingFileCount} embedding files to compare against`);
+      await fileLogger.logInfo(`Computed similarities for ${duplicateData.totalIssuesCompared} issues`);
       await fileLogger.logDecision(`Found ${similarIssues.length} similar issues`);
       if (similarIssues.length > 0) {
         await fileLogger.logData('Similar Issues', similarIssues);
       }
       logger.debug(`Found ${similarIssues.length} similar issues`);
-    } catch (error) {
-      await fileLogger.logInfo(`Similar issue search failed: ${error}`);
-      logger.debug(`Similar issue search failed: ${error}`);
+    } else {
+      await fileLogger.logInfo(`Similar issue search failed: ${duplicateResult.reason}`);
+      logger.debug(`Similar issue search failed: ${duplicateResult.reason}`);
     }
 
     // Generate combined action if needed
@@ -212,12 +220,11 @@ ${formatActionsAsMarkdown(actions)}
   }
 }
 
-async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef, config: Config, fileLogger: ReturnType<typeof createFileLogger>): Promise<string[]> {
+async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: string, issueRef: IssueRef, config: Config): Promise<{ results: string[]; embeddingFileCount: number; totalIssuesCompared: number }> {
   // Load summaries 
   const summariesContent = await readFile('.data/summaries.json', 'utf-8');
   const summaries = SummariesDataSchema.parse(JSON.parse(summariesContent));
 
-  await fileLogger.logInfo('Creating embedding for current issue...');
   // Create embedding for current issue
   const currentIssueText = `${issueTitle}\n\n${issueBody.slice(0, 2000)}`;
   // Cap the string length for embedding input to avoid API errors
@@ -235,7 +242,7 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
 
   // Recursively find all .embeddings.json files in .data directory
   const embeddingFiles = await findEmbeddingFiles('.data');
-  await fileLogger.logInfo(`Found ${embeddingFiles.length} embedding files to compare against`);
+  const embeddingFileCount = embeddingFiles.length;
 
   for (const filePath of embeddingFiles) {
     // Extract issue key from file path: .data/owner/repo/123.embeddings.json -> owner/repo#123
@@ -295,12 +302,7 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
   similarities.sort((a, b) => b.similarity - a.similarity);
   const top5 = similarities.slice(0, 5);
 
-  await fileLogger.logInfo(`Computed similarities for ${similarities.length} issues`);
-  await fileLogger.logData('Top 5 Similar Issues', top5.map(s => ({
-    issueKey: s.issueKey,
-    similarity: s.similarity,
-    percentage: Math.round(s.similarity * 100),
-  })));
+  const totalIssuesCompared = similarities.length;
 
 
   // Load issue data to get titles
@@ -335,7 +337,11 @@ async function findDuplicates(ai: AIWrapper, issueBody: string, issueTitle: stri
     formattedIssues.push(formattedIssue);
   }
 
-  return formattedIssues;
+  return {
+    results: formattedIssues,
+    embeddingFileCount,
+    totalIssuesCompared,
+  };
 }
 
 /**
