@@ -177,12 +177,26 @@ describe('NewspaperGenerator', () => {
         labels: [],
         milestone: null,
         assignees: [],
-        created_at: '2024-01-03T12:00:00Z', // Future relative to reportDate
+        created_at: '2024-01-01T12:00:00Z', // Before window
         updated_at: '2024-01-03T12:00:00Z',
         closed_at: null,
         author_association: 'NONE',
         reactions: {},
-        comments: [],
+        comments: [
+          {
+            id: 1,
+            body: 'Future comment',
+            user: {
+              login: 'commenter',
+              id: 2,
+              type: 'User',
+            },
+            created_at: '2024-01-03T12:00:00Z', // Future relative to reportDate
+            updated_at: '2024-01-03T12:00:00Z',
+            author_association: 'NONE',
+            reactions: {},
+          },
+        ],
         is_pull_request: false,
       };
       
@@ -193,8 +207,8 @@ describe('NewspaperGenerator', () => {
       // Should not contain negative days like "(-1 days ago)"
       expect(report).not.toContain('(-');
       expect(report).not.toContain('-1 days ago');
-      // The issue only has a creation event, which doesn't show time descriptions
-      // so we just verify no negative days are shown
+      // Should show "[later]" as a link for future events
+      expect(report).toContain('[later]');
     });
 
     it('should filter bot comments from generating action items', async () => {
@@ -414,6 +428,217 @@ describe('NewspaperGenerator', () => {
       
       // Should contain the plain text version
       expect(report).toContain('said "Try using console.log for debugging"');
+    });
+
+    it('should coalesce consecutive metadata events from same actor', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-01T00:00:00Z', // Before window
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [],
+        timeline_events: [
+          {
+            id: 1,
+            event: 'labeled',
+            created_at: '2024-01-02T20:00:00Z',
+            actor: { login: 'RyanCavanaugh', id: 1 },
+            label: { name: 'Bug' },
+          },
+          {
+            id: 2,
+            event: 'labeled',
+            created_at: '2024-01-02T20:00:05Z',
+            actor: { login: 'RyanCavanaugh', id: 1 },
+            label: { name: 'Help Wanted' },
+          },
+          {
+            id: 3,
+            event: 'milestoned',
+            created_at: '2024-01-02T20:00:10Z',
+            actor: { login: 'RyanCavanaugh', id: 1 },
+            milestone: { title: 'Backlog' },
+          },
+        ],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Should coalesce into a single bullet point
+      expect(report).toContain('**RyanCavanaugh** added labels `Bug`, `Help Wanted`, and set milestone to `Backlog`');
+      
+      // Should NOT have separate bullet points for each action
+      const bulletCount = (report.match(/\* \(today\) \*\*RyanCavanaugh\*\*/g) || []).length;
+      expect(bulletCount).toBe(1);
+    });
+
+    it('should not coalesce metadata events from different actors', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-01T00:00:00Z', // Before window
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [],
+        timeline_events: [
+          {
+            id: 1,
+            event: 'labeled',
+            created_at: '2024-01-02T20:00:00Z',
+            actor: { login: 'RyanCavanaugh', id: 1 },
+            label: { name: 'Bug' },
+          },
+          {
+            id: 2,
+            event: 'labeled',
+            created_at: '2024-01-02T20:00:05Z',
+            actor: { login: 'OtherUser', id: 2 },
+            label: { name: 'Help Wanted' },
+          },
+        ],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Should have separate bullet points for different actors
+      expect(report).toContain('**RyanCavanaugh** added label `Bug`');
+      expect(report).toContain('**OtherUser** added label `Help Wanted`');
+    });
+
+    it('should not coalesce metadata events with non-metadata events', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-01T00:00:00Z', // Before window
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [
+          {
+            id: 1,
+            body: 'Test comment',
+            user: {
+              login: 'RyanCavanaugh',
+              id: 1,
+              type: 'User',
+            },
+            created_at: '2024-01-02T20:00:05Z',
+            updated_at: '2024-01-02T20:00:05Z',
+            author_association: 'OWNER',
+            reactions: {},
+          },
+        ],
+        timeline_events: [
+          {
+            id: 1,
+            event: 'labeled',
+            created_at: '2024-01-02T20:00:00Z',
+            actor: { login: 'RyanCavanaugh', id: 1 },
+            label: { name: 'Bug' },
+          },
+          {
+            id: 2,
+            event: 'labeled',
+            created_at: '2024-01-02T20:00:10Z',
+            actor: { login: 'RyanCavanaugh', id: 1 },
+            label: { name: 'Help Wanted' },
+          },
+        ],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Comment interrupts the metadata events, so they should be separate
+      expect(report).toContain('**RyanCavanaugh** added label `Bug`');
+      expect(report).toContain('**RyanCavanaugh** added label `Help Wanted`');
+      expect(report).toContain('Test comment');
     });
   });
 });
