@@ -96,12 +96,28 @@ async function main() {
     // Create FAQ matcher
     const faqMatcher = createFAQMatcher(ai, logger, 'FAQ.md', config.github.faqUrl);
 
-    // Check FAQ entries using new per-entry matching
-    await fileLogger.logSection('FAQ Matching');
+    // Run FAQ matching and duplicate detection concurrently
+    await fileLogger.logSection('FAQ Matching and Duplicate Detection');
+    await fileLogger.logInfo('Starting concurrent FAQ matching and duplicate detection...');
+
+    const [faqResult, duplicateResult] = await Promise.allSettled([
+      // FAQ matching
+      (async () => {
+        await fileLogger.logInfo('Checking for FAQ matches...');
+        return await faqMatcher.checkAllFAQMatches(issue.title, issueBody, issueRef);
+      })(),
+      // Duplicate detection
+      (async () => {
+        await fileLogger.logInfo('Searching for similar issues...');
+        return await findDuplicates(ai, issueBody, issue.title, issueRef, config, fileLogger);
+      })()
+    ]);
+
+    // Process FAQ results
+    await fileLogger.logSection('FAQ Matching Results');
     let faqMatches: Awaited<ReturnType<typeof faqMatcher.checkAllFAQMatches>> = [];
-    try {
-      await fileLogger.logInfo('Checking for FAQ matches...');
-      faqMatches = await faqMatcher.checkAllFAQMatches(issue.title, issueBody, issueRef);
+    if (faqResult.status === 'fulfilled') {
+      faqMatches = faqResult.value;
       if (faqMatches.length > 0) {
         await fileLogger.logDecision(`Found ${faqMatches.length} FAQ match(es)`);
         await fileLogger.logData('FAQ Matches', faqMatches.map(m => ({
@@ -113,25 +129,24 @@ async function main() {
       } else {
         await fileLogger.logDecision('No FAQ matches found');
       }
-    } catch (error) {
-      await fileLogger.logInfo(`FAQ check failed: ${error}`);
-      logger.debug(`FAQ check failed: ${error}`);
+    } else {
+      await fileLogger.logInfo(`FAQ check failed: ${faqResult.reason}`);
+      logger.debug(`FAQ check failed: ${faqResult.reason}`);
     }
 
-    // Check for duplicates and similar issues
-    await fileLogger.logSection('Duplicate Detection');
+    // Process duplicate detection results
+    await fileLogger.logSection('Duplicate Detection Results');
     let similarIssues: string[] = [];
-    try {
-      await fileLogger.logInfo('Searching for similar issues...');
-      similarIssues = await findDuplicates(ai, issueBody, issue.title, issueRef, config, fileLogger);
+    if (duplicateResult.status === 'fulfilled') {
+      similarIssues = duplicateResult.value;
       await fileLogger.logDecision(`Found ${similarIssues.length} similar issues`);
       if (similarIssues.length > 0) {
         await fileLogger.logData('Similar Issues', similarIssues);
       }
       logger.debug(`Found ${similarIssues.length} similar issues`);
-    } catch (error) {
-      await fileLogger.logInfo(`Similar issue search failed: ${error}`);
-      logger.debug(`Similar issue search failed: ${error}`);
+    } else {
+      await fileLogger.logInfo(`Similar issue search failed: ${duplicateResult.reason}`);
+      logger.debug(`Similar issue search failed: ${duplicateResult.reason}`);
     }
 
     // Generate combined action if needed
