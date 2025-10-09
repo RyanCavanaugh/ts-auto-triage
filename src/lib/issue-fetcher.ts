@@ -8,7 +8,7 @@ import { ensureDirectoryExists, createIssueDataPath } from './utils.js';
 
 export interface IssueFetcher {
   fetchIssue(ref: IssueRef): Promise<GitHubIssue>;
-  fetchAllIssues(owner: string, repo: string): Promise<void>;
+  fetchAllIssues(owner: string, repo: string, force?: boolean): Promise<void>;
   getLocalIssue(ref: IssueRef): Promise<GitHubIssue | null>;
   hasLocalIssue(ref: IssueRef): Promise<boolean>;
 }
@@ -113,6 +113,31 @@ export function createIssueFetcher(
           allComments = allComments.concat(nextPage.data);
         }
 
+        // Fetch timeline events
+        const timelineResponse = await octokit.rest.issues.listEventsForTimeline({
+          owner: ref.owner,
+          repo: ref.repo,
+          issue_number: ref.number,
+          per_page: 100,
+        });
+
+        let allTimelineEvents = timelineResponse.data;
+        
+        // Handle pagination for timeline events
+        let timelinePage = 2;
+        while (timelineResponse.data.length === 100) {
+          const nextPage = await octokit.rest.issues.listEventsForTimeline({
+            owner: ref.owner,
+            repo: ref.repo,
+            issue_number: ref.number,
+            per_page: 100,
+            page: timelinePage++,
+          });
+          
+          if (nextPage.data.length === 0) break;
+          allTimelineEvents = allTimelineEvents.concat(nextPage.data);
+        }
+
         // Transform to our schema format
         const issue = {
           ...issueResponse.data,
@@ -138,6 +163,39 @@ export function createIssueFetcher(
               rocket: comment.reactions?.rocket ?? 0,
               eyes: comment.reactions?.eyes ?? 0,
             },
+          })),
+          timeline_events: allTimelineEvents.map((event: any) => ({
+            id: event.id,
+            event: event.event,
+            actor: event.actor ? {
+              login: event.actor.login ?? 'unknown',
+              id: event.actor.id ?? 0,
+              type: event.actor.type ?? 'User',
+            } : null,
+            created_at: event.created_at,
+            author_association: event.author_association,
+            body: event.body,
+            label: event.label,
+            assignee: event.assignee ? {
+              login: event.assignee.login,
+              id: event.assignee.id,
+              type: event.assignee.type ?? 'User',
+            } : undefined,
+            assigner: event.assigner ? {
+              login: event.assigner.login,
+              id: event.assigner.id,
+              type: event.assigner.type ?? 'User',
+            } : undefined,
+            milestone: event.milestone ? {
+              title: event.milestone.title,
+            } : undefined,
+            rename: event.rename,
+            html_url: event.html_url,
+            user: event.user ? {
+              login: event.user.login,
+              id: event.user.id,
+              type: event.user.type ?? 'User',
+            } : undefined,
           })),
           reactions: {
             '+1': issueResponse.data.reactions?.['+1'] ?? 0,
@@ -199,8 +257,8 @@ export function createIssueFetcher(
       }
     },
 
-    async fetchAllIssues(owner: string, repo: string): Promise<void> {
-      logger.info(`Starting bulk fetch for ${owner}/${repo} using cursor-based pagination`);
+    async fetchAllIssues(owner: string, repo: string, force: boolean = false): Promise<void> {
+      logger.info(`Starting bulk fetch for ${owner}/${repo} using cursor-based pagination${force ? ' (force mode)' : ''}`);
       
       let cursor: string | null = null;
       let hasNextPage = true;
@@ -212,6 +270,8 @@ export function createIssueFetcher(
           pageCount++;
           logger.info(`Fetching page ${pageCount} for ${owner}/${repo} (cursor: ${cursor?.substring(0, 10) || 'none'}...)`);
           
+          // Note: GitHub's issues API includes both issues and pull requests
+          // The GraphQL API returns them together when querying the issues field
           const query = `
             query($owner: String!, $repo: String!, $cursor: String) {
               repository(owner: $owner, name: $repo) {
@@ -287,11 +347,13 @@ export function createIssueFetcher(
             const ref: IssueRef = { owner, repo, number: issue.number };
             
             // Check if we already have this issue and it's up to date
-            const localIssue = await this.getLocalIssue(ref);
-            if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updatedAt)) {
-              logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
-              cachedIssuesInPage++;
-              continue;
+            if (!force) {
+              const localIssue = await this.getLocalIssue(ref);
+              if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updatedAt)) {
+                logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
+                cachedIssuesInPage++;
+                continue;
+              }
             }
             
             // Fetch the full issue data using REST API (which includes comments)
@@ -302,8 +364,8 @@ export function createIssueFetcher(
             await sleep(100);
           }
           
-          // If entire page was already cached, stop processing
-          if (cachedIssuesInPage === pageSize && pageSize > 0) {
+          // If entire page was already cached and not in force mode, stop processing
+          if (!force && cachedIssuesInPage === pageSize && pageSize > 0) {
             logger.info(`Entire page ${pageCount} (${pageSize} issues) was already up-to-date. Stopping early to avoid unnecessary API calls.`);
             hasNextPage = false;
             break;

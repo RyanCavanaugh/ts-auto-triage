@@ -17,13 +17,21 @@ async function main() {
     // Parse command line arguments
     const args = process.argv.slice(2);
     let repos: Array<[owner: string, repo: string]> = [];
+    let force = false;
+
+    // Check for --force flag
+    const forceIndex = args.indexOf('--force');
+    if (forceIndex >= 0) {
+      force = true;
+      args.splice(forceIndex, 1);
+    }
 
     if (args.length === 0) {
       // No arguments - use config repos
       if (!config.github.repos || config.github.repos.length === 0) {
-        console.error('Usage: fetch-issues [<owner/repo>...]');
+        console.error('Usage: fetch-issues [--force] [<owner/repo>...]');
         console.error('Example: fetch-issues Microsoft/TypeScript');
-        console.error('Example: fetch-issues Microsoft/TypeScript facebook/react');
+        console.error('Example: fetch-issues --force Microsoft/TypeScript facebook/react');
         console.error('');
         console.error('Or configure default repositories in config.jsonc under github.repos');
         process.exit(1);
@@ -33,6 +41,10 @@ async function main() {
     } else {
       // Use repos from arguments
       repos = args.map(repoInput => parseRepoRef(repoInput));
+    }
+
+    if (force) {
+      logger.info('Force mode enabled - will re-fetch all issues regardless of cache status');
     }
 
     // Create authenticated Octokit client and issue fetcher
@@ -45,7 +57,7 @@ async function main() {
     for (const [owner, repo] of repos) {
       logger.info(`Fetching all issues for: ${owner}/${repo}`);
       try {
-        await issueFetcher.fetchAllIssues(owner, repo);
+        await issueFetcher.fetchAllIssues(owner, repo, force);
         logger.info(`Completed fetching all issues for ${owner}/${repo}`);
       } catch (error) {
         logger.error(`Failed to fetch issues for ${owner}/${repo}: ${error}`);

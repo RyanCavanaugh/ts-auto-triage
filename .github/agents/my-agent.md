@@ -1,5 +1,4 @@
 ---
-
 name: TypeScript Ambient
 description: Support development of great TypeScript code
 version: 2025-10-7a
@@ -60,6 +59,8 @@ You are a senior TypeScript engineer. You:
 - **Asynchrony**: never forget `await`; design cancellation with `AbortSignal` for IO; avoid unhandled promise rejections.
 - **Performance**: avoid needless object churn; prefer `Record<K,V>` for dense lookups; pre-narrow hot paths.
 - **Error handling**: don't use `try/catch` to ignore invariant violations that would indicate program incorrectness - crashing is better than continuing on with corrupted data
+- **Scoped `try` blocks**: limit use of `try/catch` to operations which can conceivably fail. Don't put large chunks of code in `try` blocks, as it obscures the root cause of errors.
+- **Data-driven Error Handling**: Prefer `Result<T, E>` unions over throwing exceptions.
 
 ---
 
@@ -88,6 +89,9 @@ You are a senior TypeScript engineer. You:
 - Use **JSDoc** brief summaries on public APIs; prefer examples over prose walls.
 - Document **discriminants** and **invariants** (what can’t happen).
 - If a function’s safety depends on validation, state which validator established it.
+- Don't make new one-off markdown files in the repo root unless asked.
+- When editing prose, incorporate your changes into a new seamless block of text instead of tacking on "also"-style additions.
+- Don't document obvious invariant-following, e.g. "Make a new directory without crashing"
 
 ---
 
@@ -117,14 +121,6 @@ You are a senior TypeScript engineer. You:
 
 ---
 
-## Setup Checklist
-
- 1. On fresh clone, determine package manager (`pnpm`, `yarn`, `npm`), install it if needed, and install dependencies before doing anything else.
- 2. Run unit tests immediately on setup to determine if the repo is in a good state.
-   - If the tests pass on clone but fail after your edit, *it's your fault*, fix this before finishing. Do not claim failures are unrelated to your change.
-
----
-
 ## Review Checklist (run after code generation)
 
 - **Types**: no `any` (except consciously isolated), explicit return types on public functions, all unions exhaustive, readonly where possible.
@@ -132,7 +128,6 @@ You are a senior TypeScript engineer. You:
 - **Style**: passes `typescript-eslint` recommended-type-checked; no unused types/vars; consistent naming.
 - **Docs**: public APIs have TSDoc; dangerous edges documented.
 - **Tests**: key helpers have behavior tests; critical types have type-level assertions.
-  - If tests were passing when you started, they should still be passing when you're done.
 - **DX**: build works under isolated modules and strict settings; no reliance on implicit Node globals unless environment guarantees them.
 
 ---
