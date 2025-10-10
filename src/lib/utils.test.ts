@@ -1,4 +1,4 @@
-import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, formatActionsAsMarkdown, parseRepoRef } from './utils.js';
+import { parseIssueRef, formatIssueRef, createCacheKey, createCachePath, escapeTextForPrompt, escapeMarkdown, formatActionsAsMarkdown, parseRepoRef } from './utils.js';
 import type { IssueAction } from './schemas.js';
 
 describe('Utils', () => {
@@ -141,6 +141,53 @@ describe('Utils', () => {
       expect(result).toContain('\\\\');  // backslashes escaped
       expect(result).toContain('\\"');   // quotes escaped
       expect(result).toContain('\\n');   // newlines escaped
+    });
+  });
+
+  describe('escapeMarkdown', () => {
+    it('should escape asterisks for bold/italic', () => {
+      const result = escapeMarkdown('text with *asterisks* and **bold**');
+      expect(result).toBe('text with \\*asterisks\\* and \\*\\*bold\\*\\*');
+    });
+
+    it('should escape square brackets and parentheses for links', () => {
+      const result = escapeMarkdown('[link text](url)');
+      expect(result).toBe('\\[link text\\]\\(url\\)');
+    });
+
+    it('should escape backticks for code', () => {
+      const result = escapeMarkdown('use `code` here');
+      expect(result).toBe('use \\`code\\` here');
+    });
+
+    it('should escape underscores for italic/bold', () => {
+      const result = escapeMarkdown('text_with_underscores');
+      expect(result).toBe('text\\_with\\_underscores');
+    });
+
+    it('should escape hash for headings', () => {
+      const result = escapeMarkdown('# Heading');
+      expect(result).toBe('\\# Heading');
+    });
+
+    it('should escape multiple special characters', () => {
+      const result = escapeMarkdown('Issue with [brackets] and *asterisks* and `backticks`');
+      expect(result).toBe('Issue with \\[brackets\\] and \\*asterisks\\* and \\`backticks\\`');
+    });
+
+    it('should handle text with no special characters', () => {
+      const result = escapeMarkdown('simple text');
+      expect(result).toBe('simple text');
+    });
+
+    it('should handle empty string', () => {
+      const result = escapeMarkdown('');
+      expect(result).toBe('');
+    });
+
+    it('should escape backslashes first to avoid double-escaping', () => {
+      const result = escapeMarkdown('text with \\ backslash');
+      expect(result).toBe('text with \\\\ backslash');
     });
   });
 

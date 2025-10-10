@@ -640,5 +640,191 @@ describe('NewspaperGenerator', () => {
       expect(report).toContain('**RyanCavanaugh** added label `Help Wanted`');
       expect(report).toContain('Test comment');
     });
+
+    it('should escape markdown special characters in issue title', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Issue with [brackets] and *asterisks* and `backticks`',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-02T20:00:00Z',
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Title should be escaped in the bold version (but not in the hyperlink)
+      expect(report).toContain('**Issue with \\[brackets\\] and \\*asterisks\\* and \\`backticks\\`**');
+    });
+
+    it('should display issue metadata after hyperlink', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'microsoft',
+        repo: 'TypeScript',
+        number: 13923,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 13923,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [
+          { name: 'Bug', color: 'red' },
+          { name: 'Help Wanted', color: 'green' },
+          { name: 'Backlog', color: 'blue' },
+        ],
+        milestone: null,
+        assignees: [
+          { login: 'andrewbranch', id: 2, type: 'User' },
+        ],
+        created_at: '2024-01-02T20:00:00Z',
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Should contain the issue reference as hyperlink followed by metadata
+      expect(report).toContain('### [Issue microsoft/TypeScript#13923](https://github.com/microsoft/TypeScript/issues/13923) (Open, `Bug`, `Help Wanted`, `Backlog`, **andrewbranch**)');
+    });
+
+    it('should display closed state in metadata', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test Issue',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'closed',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-02T20:00:00Z',
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: '2024-01-02T21:00:00Z',
+        author_association: 'NONE',
+        reactions: {},
+        comments: [],
+        is_pull_request: false,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Should show Closed state
+      expect(report).toContain('(Closed)');
+    });
+
+    it('should handle pull request type in metadata', async () => {
+      const generator = createNewspaperGenerator(mockAI, mockLogger);
+      
+      const date = new Date('2024-01-02T00:00:00Z');
+      const startTime = new Date('2024-01-02T16:00:00Z');
+      const endTime = new Date('2024-01-03T16:00:00Z');
+      
+      const issueRef: IssueRef = {
+        owner: 'test',
+        repo: 'repo',
+        number: 1,
+      };
+      
+      const issue: GitHubIssue = {
+        id: 1,
+        number: 1,
+        title: 'Test PR',
+        body: 'Test body',
+        user: {
+          login: 'testuser',
+          id: 1,
+          type: 'User',
+        },
+        state: 'open',
+        state_reason: null,
+        labels: [],
+        milestone: null,
+        assignees: [],
+        created_at: '2024-01-02T20:00:00Z',
+        updated_at: '2024-01-02T20:00:00Z',
+        closed_at: null,
+        author_association: 'NONE',
+        reactions: {},
+        comments: [],
+        is_pull_request: true,
+      };
+      
+      const issues: Array<{ ref: IssueRef; issue: GitHubIssue }> = [{ ref: issueRef, issue }];
+      
+      const report = await generator.generateDailyReport(date, issues, startTime, endTime);
+      
+      // Should show Pull Request in header
+      expect(report).toContain('### [Pull Request test/repo#1]');
+    });
   });
 });

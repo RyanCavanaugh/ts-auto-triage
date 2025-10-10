@@ -66,6 +66,30 @@ export function truncateText(text: string, maxLength: number): string {
 }
 
 /**
+ * Escapes markdown special characters to prevent unintended formatting.
+ * This is needed when displaying user-provided text (like issue titles) in markdown output.
+ */
+export function escapeMarkdown(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')         // Escape backslashes first
+    .replace(/\*/g, '\\*')          // Escape asterisks (bold/italic)
+    .replace(/_/g, '\\_')           // Escape underscores (bold/italic)
+    .replace(/\[/g, '\\[')          // Escape square brackets (links)
+    .replace(/\]/g, '\\]')          // Escape square brackets (links)
+    .replace(/\(/g, '\\(')          // Escape parentheses (links)
+    .replace(/\)/g, '\\)')          // Escape parentheses (links)
+    .replace(/`/g, '\\`')           // Escape backticks (code)
+    .replace(/#/g, '\\#')           // Escape hashes (headings)
+    .replace(/\+/g, '\\+')          // Escape plus (lists)
+    .replace(/-/g, '\\-')           // Escape dashes (lists)
+    .replace(/\./g, '\\.')          // Escape dots (lists)
+    .replace(/!/g, '\\!')           // Escape exclamation (images)
+    .replace(/\|/g, '\\|')          // Escape pipes (tables)
+    .replace(/>/g, '\\>')           // Escape greater than (quotes)
+    .replace(/</g, '\\<');          // Escape less than (HTML)
+}
+
+/**
  * Escapes special characters in text to prevent JSON parsing errors.
  * This is needed when text will be embedded in prompts that are later JSON-stringified.
  * Handles backslashes, quotes, newlines, and other control characters.

@@ -2,6 +2,7 @@ import type { IssueRef, GitHubIssue, TimelineEvent, CommentSummary } from './sch
 import { CommentSummarySchema } from './schemas.js';
 import type { AIWrapper } from './ai-wrapper.js';
 import type { Logger } from './utils.js';
+import { escapeMarkdown } from './utils.js';
 import { loadPrompt } from './prompts.js';
 import removeMd from 'remove-markdown';
 import { z } from 'zod';
@@ -168,8 +169,34 @@ async function buildIssueSummary(
     oneSentenceSummary = issue.title;
   }
   
-  let markdown = `### [${issueType} ${issueRef.owner}/${issueRef.repo}#${issueRef.number}](${issueUrl})\n\n`;
-  markdown += `**${issue.title}**\n\n`;
+  let markdown = `### [${issueType} ${issueRef.owner}/${issueRef.repo}#${issueRef.number}](${issueUrl})`;
+  
+  // Add metadata after the hyperlink
+  const metadataParts: string[] = [];
+  
+  // Add state
+  const state = issue.state === 'open' ? 'Open' : 'Closed';
+  metadataParts.push(state);
+  
+  // Add labels
+  for (const label of issue.labels) {
+    metadataParts.push(`\`${label.name}\``);
+  }
+  
+  // Add assignees
+  for (const assignee of issue.assignees) {
+    metadataParts.push(`**${assignee.login}**`);
+  }
+  
+  if (metadataParts.length > 0) {
+    markdown += ` (${metadataParts.join(', ')})`;
+  }
+  
+  markdown += `\n\n`;
+  
+  // Escape markdown in the title for display
+  const escapedTitle = escapeMarkdown(issue.title);
+  markdown += `**${escapedTitle}**\n\n`;
   markdown += `*${oneSentenceSummary}*\n\n`;
   
   const actions: ActionItem[] = [];
