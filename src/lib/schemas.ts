@@ -50,7 +50,7 @@ export const TimelineEventSchema = z.object({
   id: z.number().optional(),
   event: z.string(),
   actor: TimelineEventActorSchema.nullable().optional(),
-  created_at: z.string(),
+  created_at: z.string().optional(),
   author_association: z.string().optional(),
   body: z.string().optional(),
   label: z.object({

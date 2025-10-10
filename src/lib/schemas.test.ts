@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { FAQResponseSchema } from './schemas.js';
+import { FAQResponseSchema, TimelineEventSchema } from './schemas.js';
 import { zodResponseFormat } from 'openai/helpers/zod.js';
 
 describe('FAQ Response Schema', () => {
@@ -110,5 +110,55 @@ describe('FAQ Response Schema', () => {
     
     // Should NOT have "nullable: true" property which Azure OpenAI doesn't support
     expect(responseField).not.toHaveProperty('nullable');
+  });
+});
+
+describe('Timeline Event Schema', () => {
+  test('should accept valid timeline event with created_at', () => {
+    const data = {
+      id: 123,
+      event: 'labeled',
+      actor: { login: 'testuser', id: 1, type: 'User' },
+      created_at: '2024-01-01T00:00:00Z',
+    };
+
+    const result = TimelineEventSchema.safeParse(data);
+    expect(result.success).toBe(true);
+  });
+
+  test('should accept timeline event without created_at', () => {
+    const data = {
+      id: 123,
+      event: 'labeled',
+      actor: { login: 'testuser', id: 1, type: 'User' },
+      // missing created_at
+    };
+
+    const result = TimelineEventSchema.safeParse(data);
+    expect(result.success).toBe(true);
+  });
+
+  test('should reject timeline event with null created_at', () => {
+    const data = {
+      id: 123,
+      event: 'labeled',
+      actor: { login: 'testuser', id: 1, type: 'User' },
+      created_at: null,
+    };
+
+    const result = TimelineEventSchema.safeParse(data);
+    expect(result.success).toBe(false);
+  });
+
+  test('should accept timeline event with undefined created_at', () => {
+    const data = {
+      id: 123,
+      event: 'labeled',
+      actor: { login: 'testuser', id: 1, type: 'User' },
+      created_at: undefined,
+    };
+
+    const result = TimelineEventSchema.safeParse(data);
+    expect(result.success).toBe(true);
   });
 });
