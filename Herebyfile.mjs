@@ -129,6 +129,16 @@ export const fetchIssue = task({
     },
 });
 
+export const fetchPR = task({
+    name: "fetch-pr",
+    description: "Fetch a single pull request from GitHub",
+    dependencies: [build],
+    run: async () => {
+        const prRef = getIssueRefFromArgs('fetch-pr');
+        await execa("node", ["dist/cli/fetch-pr.js", prRef], { stdio: "inherit" });
+    },
+});
+
 export const curateIssue = task({
     name: "curate-issue",
     description: "Run AI-powered curation on an issue",
@@ -188,6 +198,28 @@ export const fetchIssues = task({
         }
         
         await execa("node", ["dist/cli/fetch-issues.js", ...args], { stdio: "inherit" });
+    },
+});
+
+export const fetchPRs = task({
+    name: "fetch-prs",
+    description: "Fetch all pull requests for repositories from GitHub",
+    dependencies: [build],
+    run: async () => {
+        const repoRefs = getRepoRefFromArgs('fetch-prs', true);
+        
+        // Check for --force flag
+        const separatorIndex = process.argv.indexOf('--');
+        let args = repoRefs;
+        if (separatorIndex >= 0) {
+            const allArgs = process.argv.slice(separatorIndex + 1);
+            const forceIndex = allArgs.indexOf('--force');
+            if (forceIndex >= 0) {
+                args = ['--force', ...repoRefs];
+            }
+        }
+        
+        await execa("node", ["dist/cli/fetch-prs.js", ...args], { stdio: "inherit" });
     },
 });
 

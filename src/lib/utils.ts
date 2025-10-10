@@ -5,13 +5,13 @@ import { execSync } from 'child_process';
 import type { IssueRef, Config, IssueAction } from './schemas.js';
 
 export function parseIssueRef(input: string, defaultRepo?: string): IssueRef {
-  // Handle URL format: https://github.com/owner/repo/issues/123
-  const urlMatch = input.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/);
+  // Handle URL format: https://github.com/owner/repo/issues/123 or /pull/123
+  const urlMatch = input.match(/github\.com\/([^\/]+)\/([^\/]+)\/(issues|pull)\/(\d+)/);
   if (urlMatch) {
     return {
       owner: urlMatch[1]!,
       repo: urlMatch[2]!,
-      number: parseInt(urlMatch[3]!, 10),
+      number: parseInt(urlMatch[4]!, 10),
     };
   }
 
@@ -63,6 +63,30 @@ export function truncateText(text: string, maxLength: number): string {
     return text;
   }
   return text.slice(0, maxLength - 3) + '...';
+}
+
+/**
+ * Escapes markdown special characters to prevent unintended formatting.
+ * This is needed when displaying user-provided text (like issue titles) in markdown output.
+ */
+export function escapeMarkdown(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')         // Escape backslashes first
+    .replace(/\*/g, '\\*')          // Escape asterisks (bold/italic)
+    .replace(/_/g, '\\_')           // Escape underscores (bold/italic)
+    .replace(/\[/g, '\\[')          // Escape square brackets (links)
+    .replace(/\]/g, '\\]')          // Escape square brackets (links)
+    .replace(/\(/g, '\\(')          // Escape parentheses (links)
+    .replace(/\)/g, '\\)')          // Escape parentheses (links)
+    .replace(/`/g, '\\`')           // Escape backticks (code)
+    .replace(/#/g, '\\#')           // Escape hashes (headings)
+    .replace(/\+/g, '\\+')          // Escape plus (lists)
+    .replace(/-/g, '\\-')           // Escape dashes (lists)
+    .replace(/\./g, '\\.')          // Escape dots (lists)
+    .replace(/!/g, '\\!')           // Escape exclamation (images)
+    .replace(/\|/g, '\\|')          // Escape pipes (tables)
+    .replace(/>/g, '\\>')           // Escape greater than (quotes)
+    .replace(/</g, '\\<');          // Escape less than (HTML)
 }
 
 /**
