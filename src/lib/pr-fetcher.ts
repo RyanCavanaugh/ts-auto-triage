@@ -223,7 +223,7 @@ export function createPRFetcher(
         })),
         is_pull_request: true,
         timeline_events: allTimelineEvents
-          .filter((event: any) => event.created_at !== undefined)
+          .filter((event: any) => event.created_at != null)
           .map((event: any) => ({
             id: event.id,
             event: event.event,
