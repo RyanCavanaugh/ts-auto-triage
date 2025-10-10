@@ -9,6 +9,7 @@ import { ensureDirectoryExists, createIssueDataPath } from './utils.js';
 export interface PRFetcher {
   fetchPR(ref: IssueRef): Promise<GitHubIssue>;
   fetchAllPRs(owner: string, repo: string, force?: boolean): Promise<void>;
+  fetchRecentPRs(owner: string, repo: string, force?: boolean): Promise<void>;
   getLocalPR(ref: IssueRef): Promise<GitHubIssue | null>;
   hasLocalPR(ref: IssueRef): Promise<boolean>;
 }
@@ -405,6 +406,148 @@ export function createPRFetcher(
     logger.info(`Completed bulk fetch for ${owner}/${repo}, fetched ${totalFetched} PRs across ${pageCount} pages`);
   }
 
+  async function fetchRecentPRs(owner: string, repo: string, force: boolean = false): Promise<void> {
+    logger.info(`Starting fetch of recent PRs (last 2 weeks) for ${owner}/${repo}${force ? ' (force mode)' : ''}`);
+    
+    // Calculate the date 2 weeks ago (14 days * 24 hours * 60 minutes * 60 seconds * 1000 milliseconds)
+    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    
+    let cursor: string | null = null;
+    let hasNextPage = true;
+    let totalFetched = 0;
+    let pageCount = 0;
+    let stopEarly = false;
+    
+    while (hasNextPage && !stopEarly) {
+      try {
+        pageCount++;
+        logger.info(`Fetching page ${pageCount} for ${owner}/${repo} (cursor: ${cursor?.substring(0, 10) || 'none'}...)`);
+        
+        const query = `
+          query($owner: String!, $repo: String!, $cursor: String) {
+            repository(owner: $owner, name: $repo) {
+              pullRequests(
+                first: 100,
+                after: $cursor,
+                orderBy: { field: UPDATED_AT, direction: DESC },
+                states: [OPEN, CLOSED, MERGED]
+              ) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  number
+                  title
+                  body
+                  state
+                  createdAt
+                  updatedAt
+                  closedAt
+                  url
+                  author {
+                    login
+                  }
+                  labels(first: 50) {
+                    nodes {
+                      id
+                      name
+                      color
+                      description
+                    }
+                  }
+                  milestone {
+                    id
+                    number
+                    title
+                    description
+                    state
+                  }
+                  assignees(first: 10) {
+                    nodes {
+                      login
+                      id
+                    }
+                  }
+                  reactions {
+                    totalCount
+                  }
+                }
+              }
+            }
+          }
+        `;
+        
+        const response: GraphQLPRsResponse = await graphqlClient<GraphQLPRsResponse>(query, {
+          owner,
+          repo,
+          cursor,
+        });
+        
+        const prs = response.repository.pullRequests;
+        
+        if (prs.nodes.length === 0) {
+          hasNextPage = false;
+          break;
+        }
+        
+        let recentPRsInPage = 0;
+        
+        for (const pr of prs.nodes) {
+          const prUpdatedAt = new Date(pr.updatedAt);
+          const prCreatedAt = new Date(pr.createdAt);
+          
+          // Check if PR was created or updated in the last 2 weeks
+          if (prUpdatedAt < twoWeeksAgo && prCreatedAt < twoWeeksAgo) {
+            // Since results are ordered by updatedAt DESC, we can stop when we encounter an old PR
+            logger.debug(`PR ${pr.number} is older than 2 weeks, stopping pagination`);
+            stopEarly = true;
+            break;
+          }
+          
+          recentPRsInPage++;
+          const ref: IssueRef = { owner, repo, number: pr.number };
+          
+          // Check if we already have this PR and it's up to date
+          if (!force) {
+            const localPR = await getLocalPR(ref);
+            if (localPR && new Date(localPR.updated_at) >= new Date(pr.updatedAt)) {
+              logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
+              continue;
+            }
+          }
+          
+          // Fetch the full PR data using REST API (which includes comments)
+          await fetchPR(ref);
+          totalFetched++;
+          
+          // Small delay to avoid overwhelming the API
+          await sleep(100);
+        }
+        
+        // If we didn't find any recent PRs in this page, stop
+        if (recentPRsInPage === 0) {
+          logger.info(`No recent PRs found in page ${pageCount}, stopping pagination`);
+          stopEarly = true;
+          break;
+        }
+        
+        hasNextPage = prs.pageInfo.hasNextPage;
+        cursor = prs.pageInfo.endCursor;
+        
+      } catch (error) {
+        if (error instanceof Error && 'status' in error && error.status === 403) {
+          logger.warn(`Rate limited on page ${pageCount}, waiting...`);
+          await sleep(config.github.rateLimitRetryDelay);
+          continue;
+        }
+        throw error;
+      }
+    }
+    
+    logger.info(`Completed recent fetch for ${owner}/${repo}, fetched ${totalFetched} PRs across ${pageCount} pages`);
+  }
+
   async function getLocalPR(ref: IssueRef): Promise<GitHubIssue | null> {
     const dataPath = createIssueDataPath(ref);
     
@@ -429,6 +572,7 @@ export function createPRFetcher(
   return {
     fetchPR,
     fetchAllPRs,
+    fetchRecentPRs,
     getLocalPR,
     hasLocalPR,
   };
