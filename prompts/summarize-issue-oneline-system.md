@@ -4,7 +4,7 @@ Your job is to read an issue title and body, then provide a one-sentence summary
 
 The summary should be:
 - A single, complete sentence
-- Concise (ideally 10-20 words)
+- Concise (ideally 10-20 words), absolutely no more than 500 tokens as this will crash the system.
 - Informative about what the issue is reporting or requesting
 - Written in a neutral, professional tone
 

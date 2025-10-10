@@ -155,7 +155,7 @@ async function buildIssueSummary(
       messages,
       {
         jsonSchema: z.object({ text: z.string() }),
-        maxTokens: 100,
+        maxTokens: 5000,
         context: `Summarize issue ${issueRef.owner}/${issueRef.repo}#${issueRef.number}`,
         effort: 'Low',
       }
