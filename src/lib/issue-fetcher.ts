@@ -9,6 +9,7 @@ import { ensureDirectoryExists, createIssueDataPath } from './utils.js';
 export interface IssueFetcher {
   fetchIssue(ref: IssueRef): Promise<GitHubIssue>;
   fetchAllIssues(owner: string, repo: string, force?: boolean): Promise<void>;
+  fetchRecentIssues(owner: string, repo: string, force?: boolean): Promise<void>;
   getLocalIssue(ref: IssueRef): Promise<GitHubIssue | null>;
   hasLocalIssue(ref: IssueRef): Promise<boolean>;
 }
@@ -385,6 +386,150 @@ export function createIssueFetcher(
       }
       
       logger.info(`Completed bulk fetch for ${owner}/${repo}, fetched ${totalFetched} issues across ${pageCount} pages`);
+    },
+
+    async fetchRecentIssues(owner: string, repo: string, force: boolean = false): Promise<void> {
+      logger.info(`Starting fetch of recent issues (last 2 weeks) for ${owner}/${repo}${force ? ' (force mode)' : ''}`);
+      
+      // Calculate the date 2 weeks ago
+      const twoWeeksAgo = new Date();
+      twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+      
+      let cursor: string | null = null;
+      let hasNextPage = true;
+      let totalFetched = 0;
+      let pageCount = 0;
+      let stopEarly = false;
+      
+      while (hasNextPage && !stopEarly) {
+        try {
+          pageCount++;
+          logger.info(`Fetching page ${pageCount} for ${owner}/${repo} (cursor: ${cursor?.substring(0, 10) || 'none'}...)`);
+          
+          const query = `
+            query($owner: String!, $repo: String!, $cursor: String) {
+              repository(owner: $owner, name: $repo) {
+                issues(
+                  first: 100,
+                  after: $cursor,
+                  orderBy: { field: UPDATED_AT, direction: DESC },
+                  states: [OPEN, CLOSED]
+                ) {
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
+                  nodes {
+                    number
+                    title
+                    body
+                    state
+                    createdAt
+                    updatedAt
+                    closedAt
+                    url
+                    author {
+                      login
+                    }
+                    labels(first: 50) {
+                      nodes {
+                        id
+                        name
+                        color
+                        description
+                      }
+                    }
+                    milestone {
+                      id
+                      number
+                      title
+                      description
+                      state
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        id
+                      }
+                    }
+                    reactions {
+                      totalCount
+                    }
+                  }
+                }
+              }
+            }
+          `;
+          
+          const response: GraphQLIssuesResponse = await graphqlClient<GraphQLIssuesResponse>(query, {
+            owner,
+            repo,
+            cursor,
+          });
+          
+          const issues = response.repository.issues;
+          
+          if (issues.nodes.length === 0) {
+            hasNextPage = false;
+            break;
+          }
+          
+          let recentIssuesInPage = 0;
+          const pageSize = issues.nodes.length;
+          
+          for (const issue of issues.nodes) {
+            const issueUpdatedAt = new Date(issue.updatedAt);
+            const issueCreatedAt = new Date(issue.createdAt);
+            
+            // Check if issue was created or updated in the last 2 weeks
+            if (issueUpdatedAt < twoWeeksAgo && issueCreatedAt < twoWeeksAgo) {
+              // Since results are ordered by updatedAt DESC, we can stop when we encounter an old issue
+              logger.debug(`Issue ${issue.number} is older than 2 weeks, stopping pagination`);
+              stopEarly = true;
+              break;
+            }
+            
+            recentIssuesInPage++;
+            const ref: IssueRef = { owner, repo, number: issue.number };
+            
+            // Check if we already have this issue and it's up to date
+            if (!force) {
+              const localIssue = await this.getLocalIssue(ref);
+              if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updatedAt)) {
+                logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
+                continue;
+              }
+            }
+            
+            // Fetch the full issue data using REST API (which includes comments)
+            await this.fetchIssue(ref);
+            totalFetched++;
+            
+            // Small delay to avoid overwhelming the API
+            await sleep(100);
+          }
+          
+          // If we didn't find any recent issues in this page, stop
+          if (recentIssuesInPage === 0) {
+            logger.info(`No recent issues found in page ${pageCount}, stopping pagination`);
+            stopEarly = true;
+            break;
+          }
+          
+          hasNextPage = issues.pageInfo.hasNextPage;
+          cursor = issues.pageInfo.endCursor;
+          
+        } catch (error) {
+          if (error instanceof Error && 'status' in error && error.status === 403) {
+            logger.warn(`Rate limited on page ${pageCount}, waiting...`);
+            await sleep(config.github.rateLimitRetryDelay);
+            continue;
+          }
+          throw error;
+        }
+      }
+      
+      logger.info(`Completed recent fetch for ${owner}/${repo}, fetched ${totalFetched} issues across ${pageCount} pages`);
     },
 
     async getLocalIssue(ref: IssueRef): Promise<GitHubIssue | null> {
