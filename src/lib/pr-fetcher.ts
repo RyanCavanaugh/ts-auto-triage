@@ -222,39 +222,41 @@ export function createPRFetcher(
           },
         })),
         is_pull_request: true,
-        timeline_events: allTimelineEvents.map((event: any) => ({
-          id: event.id,
-          event: event.event,
-          actor: event.actor ? {
-            login: event.actor.login ?? 'unknown',
-            id: event.actor.id ?? 0,
-            type: event.actor.type ?? 'User',
-          } : null,
-          created_at: event.created_at,
-          author_association: event.author_association,
-          body: event.body,
-          label: event.label,
-          assignee: event.assignee ? {
-            login: event.assignee.login,
-            id: event.assignee.id,
-            type: event.assignee.type ?? 'User',
-          } : undefined,
-          assigner: event.assigner ? {
-            login: event.assigner.login,
-            id: event.assigner.id,
-            type: event.assigner.type ?? 'User',
-          } : undefined,
-          milestone: event.milestone ? {
-            title: event.milestone.title,
-          } : undefined,
-          rename: event.rename,
-          html_url: event.html_url,
-          user: event.user ? {
-            login: event.user.login,
-            id: event.user.id,
-            type: event.user.type ?? 'User',
-          } : undefined,
-        })),
+        timeline_events: allTimelineEvents
+          .filter((event: any) => event.created_at !== undefined)
+          .map((event: any) => ({
+            id: event.id,
+            event: event.event,
+            actor: event.actor ? {
+              login: event.actor.login ?? 'unknown',
+              id: event.actor.id ?? 0,
+              type: event.actor.type ?? 'User',
+            } : null,
+            created_at: event.created_at,
+            author_association: event.author_association,
+            body: event.body,
+            label: event.label,
+            assignee: event.assignee ? {
+              login: event.assignee.login,
+              id: event.assignee.id,
+              type: event.assignee.type ?? 'User',
+            } : undefined,
+            assigner: event.assigner ? {
+              login: event.assigner.login,
+              id: event.assigner.id,
+              type: event.assigner.type ?? 'User',
+            } : undefined,
+            milestone: event.milestone ? {
+              title: event.milestone.title,
+            } : undefined,
+            rename: event.rename,
+            html_url: event.html_url,
+            user: event.user ? {
+              login: event.user.login,
+              id: event.user.id,
+              type: event.user.type ?? 'User',
+            } : undefined,
+          })),
       };
 
       const validatedPR = GitHubIssueSchema.parse(pr);
