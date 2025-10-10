@@ -70,6 +70,7 @@ export function createNewspaperGenerator(
         // Check if any timeline events happened in window
         if (issue.timeline_events) {
           for (const event of issue.timeline_events) {
+            if (!event.created_at) continue;
             const eventDate = new Date(event.created_at);
             if (eventDate >= startTime && eventDate < endTime) {
               hasActivity = true;
@@ -238,6 +239,7 @@ async function buildIssueSummary(
   // Add timeline events
   if (issue.timeline_events) {
     for (const event of issue.timeline_events) {
+      if (!event.created_at) continue;
       const eventDate = new Date(event.created_at);
       const actor = event.actor?.login ?? 'unknown';
       

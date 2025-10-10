@@ -126,7 +126,7 @@ describe('Timeline Event Schema', () => {
     expect(result.success).toBe(true);
   });
 
-  test('should reject timeline event without created_at', () => {
+  test('should accept timeline event without created_at', () => {
     const data = {
       id: 123,
       event: 'labeled',
@@ -135,7 +135,7 @@ describe('Timeline Event Schema', () => {
     };
 
     const result = TimelineEventSchema.safeParse(data);
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   test('should reject timeline event with null created_at', () => {
@@ -150,7 +150,7 @@ describe('Timeline Event Schema', () => {
     expect(result.success).toBe(false);
   });
 
-  test('should reject timeline event with undefined created_at', () => {
+  test('should accept timeline event with undefined created_at', () => {
     const data = {
       id: 123,
       event: 'labeled',
@@ -159,6 +159,6 @@ describe('Timeline Event Schema', () => {
     };
 
     const result = TimelineEventSchema.safeParse(data);
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 });
