@@ -138,6 +138,18 @@ describe('Timeline Event Schema', () => {
     expect(result.success).toBe(true);
   });
 
+  test('should accept timeline event with null body', () => {
+    const data = {
+      id: 123,
+      event: 'labeled',
+      actor: { login: 'testuser', id: 1, type: 'User' },
+      body: null,
+    };
+
+    const result = TimelineEventSchema.safeParse(data);
+    expect(result.success).toBe(true);
+  });
+
   test('should reject timeline event with null created_at', () => {
     const data = {
       id: 123,
