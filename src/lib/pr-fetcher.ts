@@ -9,6 +9,7 @@ import { ensureDirectoryExists, createIssueDataPath } from './utils.js';
 export interface PRFetcher {
   fetchPR(ref: IssueRef): Promise<GitHubIssue>;
   fetchAllPRs(owner: string, repo: string, force?: boolean): Promise<void>;
+  fetchRecentPRs(owner: string, repo: string, since: Date, force?: boolean): Promise<void>;
   getLocalPR(ref: IssueRef): Promise<GitHubIssue | null>;
   hasLocalPR(ref: IssueRef): Promise<boolean>;
 }
@@ -405,6 +406,140 @@ export function createPRFetcher(
     logger.info(`Completed bulk fetch for ${owner}/${repo}, fetched ${totalFetched} PRs across ${pageCount} pages`);
   }
 
+  async function fetchRecentPRs(owner: string, repo: string, since: Date, force: boolean = false): Promise<void> {
+    logger.info(`Starting recent fetch of PRs for ${owner}/${repo} since ${since.toISOString()}${force ? ' (force mode)' : ''}`);
+    
+    let cursor: string | null = null;
+    let hasNextPage = true;
+    let totalFetched = 0;
+    let pageCount = 0;
+    
+    while (hasNextPage) {
+      try {
+        pageCount++;
+        logger.info(`Fetching page ${pageCount} for ${owner}/${repo} (cursor: ${cursor?.substring(0, 10) || 'none'}...)`);
+        
+        const query = `
+          query($owner: String!, $repo: String!, $cursor: String) {
+            repository(owner: $owner, name: $repo) {
+              pullRequests(
+                first: 100,
+                after: $cursor,
+                orderBy: { field: UPDATED_AT, direction: DESC },
+                states: [OPEN, CLOSED, MERGED]
+              ) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  number
+                  title
+                  body
+                  state
+                  createdAt
+                  updatedAt
+                  closedAt
+                  url
+                  author {
+                    login
+                  }
+                  labels(first: 50) {
+                    nodes {
+                      id
+                      name
+                      color
+                      description
+                    }
+                  }
+                  milestone {
+                    id
+                    number
+                    title
+                    description
+                    state
+                  }
+                  assignees(first: 10) {
+                    nodes {
+                      login
+                      id
+                    }
+                  }
+                  reactions {
+                    totalCount
+                  }
+                }
+              }
+            }
+          }
+        `;
+        
+        const response: GraphQLPRsResponse = await graphqlClient<GraphQLPRsResponse>(query, {
+          owner,
+          repo,
+          cursor,
+        });
+        
+        const prs = response.repository.pullRequests;
+        
+        if (prs.nodes.length === 0) {
+          hasNextPage = false;
+          break;
+        }
+        
+        let shouldStopPagination = false;
+        
+        for (const pr of prs.nodes) {
+          const createdAt = new Date(pr.createdAt);
+          const updatedAt = new Date(pr.updatedAt);
+          
+          // Stop if both createdAt and updatedAt are older than the since date
+          if (createdAt < since && updatedAt < since) {
+            logger.info(`Reached PR ${pr.number} older than cutoff date (created: ${pr.createdAt}, updated: ${pr.updatedAt}), stopping pagination`);
+            shouldStopPagination = true;
+            break;
+          }
+          
+          const ref: IssueRef = { owner, repo, number: pr.number };
+          
+          // Check if we already have this PR and it's up to date
+          if (!force) {
+            const localPR = await getLocalPR(ref);
+            if (localPR && new Date(localPR.updated_at) >= new Date(pr.updatedAt)) {
+              logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
+              continue;
+            }
+          }
+          
+          // Fetch the full PR data using REST API (which includes comments)
+          await fetchPR(ref);
+          totalFetched++;
+          
+          // Small delay to avoid overwhelming the API
+          await sleep(100);
+        }
+        
+        if (shouldStopPagination) {
+          hasNextPage = false;
+          break;
+        }
+        
+        hasNextPage = prs.pageInfo.hasNextPage;
+        cursor = prs.pageInfo.endCursor;
+        
+      } catch (error) {
+        if (error instanceof Error && 'status' in error && error.status === 403) {
+          logger.warn(`Rate limited on page ${pageCount}, waiting...`);
+          await sleep(config.github.rateLimitRetryDelay);
+          continue;
+        }
+        throw error;
+      }
+    }
+    
+    logger.info(`Completed recent fetch for ${owner}/${repo}, fetched ${totalFetched} PRs across ${pageCount} pages`);
+  }
+
   async function getLocalPR(ref: IssueRef): Promise<GitHubIssue | null> {
     const dataPath = createIssueDataPath(ref);
     
@@ -429,6 +564,7 @@ export function createPRFetcher(
   return {
     fetchPR,
     fetchAllPRs,
+    fetchRecentPRs,
     getLocalPR,
     hasLocalPR,
   };
