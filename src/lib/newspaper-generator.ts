@@ -136,7 +136,7 @@ async function buildIssueSummary(
   bots: string[]
 ): Promise<{ text: string; actions: ActionItem[] }> {
   const issueUrl = `https://github.com/${issueRef.owner}/${issueRef.repo}/${issue.is_pull_request ? 'pull' : 'issues'}/${issueRef.number}`;
-  const issueType = issue.is_pull_request ? 'Pull Request' : 'Issue';
+  const issueType = issue.is_pull_request ? 'PR' : 'Issue';
   
   // Generate one-sentence AI summary of the issue
   let oneSentenceSummary = '';
