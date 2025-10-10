@@ -823,8 +823,8 @@ describe('NewspaperGenerator', () => {
       
       const report = await generator.generateDailyReport(date, issues, startTime, endTime);
       
-      // Should show Pull Request in header
-      expect(report).toContain('### [Pull Request test/repo#1]');
+      // Should show PR in header
+      expect(report).toContain('### [PR test/repo#1]');
     });
   });
 });
