@@ -9,6 +9,7 @@ import { ensureDirectoryExists, createIssueDataPath } from './utils.js';
 export interface IssueFetcher {
   fetchIssue(ref: IssueRef): Promise<GitHubIssue>;
   fetchAllIssues(owner: string, repo: string, force?: boolean): Promise<void>;
+  fetchRecentIssues(owner: string, repo: string, since: Date, force?: boolean): Promise<void>;
   getLocalIssue(ref: IssueRef): Promise<GitHubIssue | null>;
   hasLocalIssue(ref: IssueRef): Promise<boolean>;
 }
@@ -385,6 +386,140 @@ export function createIssueFetcher(
       }
       
       logger.info(`Completed bulk fetch for ${owner}/${repo}, fetched ${totalFetched} issues across ${pageCount} pages`);
+    },
+
+    async fetchRecentIssues(owner: string, repo: string, since: Date, force: boolean = false): Promise<void> {
+      logger.info(`Starting recent fetch for ${owner}/${repo} since ${since.toISOString()}${force ? ' (force mode)' : ''}`);
+      
+      let cursor: string | null = null;
+      let hasNextPage = true;
+      let totalFetched = 0;
+      let pageCount = 0;
+      
+      while (hasNextPage) {
+        try {
+          pageCount++;
+          logger.info(`Fetching page ${pageCount} for ${owner}/${repo} (cursor: ${cursor?.substring(0, 10) || 'none'}...)`);
+          
+          const query = `
+            query($owner: String!, $repo: String!, $cursor: String) {
+              repository(owner: $owner, name: $repo) {
+                issues(
+                  first: 100,
+                  after: $cursor,
+                  orderBy: { field: UPDATED_AT, direction: DESC },
+                  states: [OPEN, CLOSED]
+                ) {
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
+                  nodes {
+                    number
+                    title
+                    body
+                    state
+                    createdAt
+                    updatedAt
+                    closedAt
+                    url
+                    author {
+                      login
+                    }
+                    labels(first: 50) {
+                      nodes {
+                        id
+                        name
+                        color
+                        description
+                      }
+                    }
+                    milestone {
+                      id
+                      number
+                      title
+                      description
+                      state
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        id
+                      }
+                    }
+                    reactions {
+                      totalCount
+                    }
+                  }
+                }
+              }
+            }
+          `;
+          
+          const response: GraphQLIssuesResponse = await graphqlClient<GraphQLIssuesResponse>(query, {
+            owner,
+            repo,
+            cursor,
+          });
+          
+          const issues = response.repository.issues;
+          
+          if (issues.nodes.length === 0) {
+            hasNextPage = false;
+            break;
+          }
+          
+          let shouldStopPagination = false;
+          
+          for (const issue of issues.nodes) {
+            const createdAt = new Date(issue.createdAt);
+            const updatedAt = new Date(issue.updatedAt);
+            
+            // Stop if both createdAt and updatedAt are older than the since date
+            if (createdAt < since && updatedAt < since) {
+              logger.info(`Reached issue ${issue.number} older than cutoff date (created: ${issue.createdAt}, updated: ${issue.updatedAt}), stopping pagination`);
+              shouldStopPagination = true;
+              break;
+            }
+            
+            const ref: IssueRef = { owner, repo, number: issue.number };
+            
+            // Check if we already have this issue and it's up to date
+            if (!force) {
+              const localIssue = await this.getLocalIssue(ref);
+              if (localIssue && new Date(localIssue.updated_at) >= new Date(issue.updatedAt)) {
+                logger.debug(`Skipping ${ref.owner}/${ref.repo}#${ref.number} - already up to date`);
+                continue;
+              }
+            }
+            
+            // Fetch the full issue data using REST API (which includes comments)
+            await this.fetchIssue(ref);
+            totalFetched++;
+            
+            // Small delay to avoid overwhelming the API
+            await sleep(100);
+          }
+          
+          if (shouldStopPagination) {
+            hasNextPage = false;
+            break;
+          }
+          
+          hasNextPage = issues.pageInfo.hasNextPage;
+          cursor = issues.pageInfo.endCursor;
+          
+        } catch (error) {
+          if (error instanceof Error && 'status' in error && error.status === 403) {
+            logger.warn(`Rate limited on page ${pageCount}, waiting...`);
+            await sleep(config.github.rateLimitRetryDelay);
+            continue;
+          }
+          throw error;
+        }
+      }
+      
+      logger.info(`Completed recent fetch for ${owner}/${repo}, fetched ${totalFetched} issues across ${pageCount} pages`);
     },
 
     async getLocalIssue(ref: IssueRef): Promise<GitHubIssue | null> {
