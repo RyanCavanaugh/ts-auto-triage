@@ -391,9 +391,8 @@ export function createIssueFetcher(
     async fetchRecentIssues(owner: string, repo: string, force: boolean = false): Promise<void> {
       logger.info(`Starting fetch of recent issues (last 2 weeks) for ${owner}/${repo}${force ? ' (force mode)' : ''}`);
       
-      // Calculate the date 2 weeks ago
-      const twoWeeksAgo = new Date();
-      twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+      // Calculate the date 2 weeks ago (14 days * 24 hours * 60 minutes * 60 seconds * 1000 milliseconds)
+      const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
       
       let cursor: string | null = null;
       let hasNextPage = true;
@@ -475,7 +474,6 @@ export function createIssueFetcher(
           }
           
           let recentIssuesInPage = 0;
-          const pageSize = issues.nodes.length;
           
           for (const issue of issues.nodes) {
             const issueUpdatedAt = new Date(issue.updatedAt);
