@@ -223,6 +223,28 @@ export const fetchPRs = task({
     },
 });
 
+export const fetchRecent = task({
+    name: "fetch-recent",
+    description: "Fetch all issues and PRs modified or created in the last two weeks",
+    dependencies: [build],
+    run: async () => {
+        const repoRefs = getRepoRefFromArgs('fetch-recent', true);
+        
+        // Check for --force flag
+        const separatorIndex = process.argv.indexOf('--');
+        let args = repoRefs;
+        if (separatorIndex >= 0) {
+            const allArgs = process.argv.slice(separatorIndex + 1);
+            const forceIndex = allArgs.indexOf('--force');
+            if (forceIndex >= 0) {
+                args = ['--force', ...repoRefs];
+            }
+        }
+        
+        await execa("node", ["dist/cli/fetch-recent.js", ...args], { stdio: "inherit" });
+    },
+});
+
 export const summarizeIssues = task({
     name: "summarize-issues",
     description: "Generate AI summaries for all issues in repositories",
